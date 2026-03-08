@@ -1,327 +1,151 @@
 # OKX OnchainOS AI Assistant
 
-> 🦞 参赛作品 | OKX OnchainOS AI 松
+面向链上交易用户的 AI 助手，核心能力是先做风险体检，再给执行建议。
 
-基于 OpenClaw + OKX OnchainOS Skills 开发的链上 AI 交易助手。
+这个仓库支持两类使用方式：
+- 新手：直接跑 CLI/Web，先用 dry-run，不碰私钥
+- 进阶：接入 OpenClaw 模型 + 开启 live revoke（真实上链撤销授权）
 
----
+## 1. 你能解决什么问题
 
-## 技术架构
+- 下单前不知道风险高不高：`precheck` 给出风险分、阻断项、警告项
+- 不确定现在能不能下：`simulate` 输出可执行/阻断 + 最坏成交
+- 担心被夹：`private` 输出私有交易模板（优先 private relay）
+- 钱包历史无限授权太多：`revoke` 先预演，再选择执行
 
-```
-okx-onchain-assistant/
-├── okx_skills/              # 核心模块
-│   ├── onchainos_api.py     # OKX API 封装
-│   ├── scanner.py           # 新币扫描 + AI 评分
-│   ├── audit.py            # 合约审计
-│   ├── analytics.py        # Holder/池子/热度分析
-│   ├── security.py         # 授权管理 + Gas 预警
-│   ├── monitor.py          # 套利扫描 + 闪电贷检测
-│   ├── trading_bot.py      # 自动交易机器人
-│   ├── trade_guard.py      # 交易前体检 + 大单拆单
-│   └── ai_brain.py        # AI 决策 + 回测
-├── web_ui/                  # Web 仪表盘
-├── ai_assistant/            # CLI 对话
-└── demo.py                  # 演示脚本
-```
+## 2. 3 分钟跑通（推荐新手）
 
----
-
-## 核心功能
-
-### 交易核心
-
-| 模块 | 功能 |
-|------|------|
-| `scanner.py` | 新币监控、AI 评分 (≥85 推送)、合约审计 |
-| `audit.py` | 流动性检测、增发/黑名单扫描、蜜罐识别 |
-| `trading_bot.py` | 自动开仓/平仓、止盈止损、仓位管理 |
-| `onchainos_api.py` | 钱包余额、DEX 闪兑、跨链桥 |
-| `trade_guard.py` | 下单前体检 + 拆单 + 路由质量 + 私有交易模板 + 交易模拟 + 授权撤销流 |
-
-### 链上分析
-
-| 模块 | 功能 |
-|------|------|
-| `analytics.py` | Holder 分布、池子深度、代币热度、地址追踪 |
-| `monitor.py` | 套利扫描、新池子监控、闪电贷检测 |
-| `security.py` | Token 授权管理、一键撤销、钱包监控 |
-
-### AI 增强
-
-| 模块 | 功能 |
-|------|------|
-| `ai_brain.py` | AI 交易决策、情绪管理、策略回测 |
-| | 多链监控 (20+ 链)、异常模式识别 |
-| | 社交监听 (Twitter/TG/Discord) |
-
----
-
-## 快速开始
+### 2.1 安装
 
 ```bash
-# 克隆
 git clone https://github.com/0xUnite/okx-onchain-assistant.git
 cd okx-onchain-assistant
 
-# 安装
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+```
 
-# 运行演示
-python demo.py
+### 2.2 一键演示（不需要私钥）
 
-# 查看提示词
-python demo.py prompts
+```bash
+python painkiller_demo.py --chain ethereum --wallet 0x742d35Cc6634C0532925a3b844Bc9e7595f
+```
 
-# 启动 Web
-python web_ui/main.py
+你会看到 4 段结果：
+- `[1] Precheck`
+- `[2] Simulate`
+- `[3] Private TX Strategy`
+- `[4] Revoke High-Risk Approvals`
 
-# CLI 助手
+## 3. 新手最常用命令（CLI）
+
+```bash
+# 启动交互模式
 python ai_assistant/main.py
 
-# 一键痛点演示（precheck -> simulate -> private -> revoke）
-python painkiller_demo.py
-```
-
----
-
-## 模块详解
-
-### 1. 新币扫描 + AI 评分
-
-```python
-from okx_skills.scanner import NewTokenScanner
-
-scanner = NewTokenScanner()
-tokens = scanner.scan_chain("ethereum")
-
-for token in tokens:
-    analysis = scanner.analyze_token(token)
-    print(f"Score: {analysis['score']} - {analysis['recommendation']}")
-```
-
-### 2. 合约审计
-
-```python
-from okx_skills.audit import audit_contract
-
-result = audit_contract("0x742d...", "ethereum")
-print(f"安全分数: {result['score']}/100")
-print(f"建议: {result['recommendation']}")
-```
-
-### 3. 交易机器人
-
-```python
-from okx_skills.trading_bot import open_position, close_position, get_positions
-
-# 开仓
-result = open_position(
-    token="WETH",
-    chain="ethereum",
-    side="LONG",
-    entry_price=3000,
-    quantity=0.1,
-    stop_loss=2850,
-    take_profit=3300
-)
-
-# 平仓
-close_position("1", 3150, "TP")
-
-# 查看仓位
-positions = get_positions("OPEN")
-```
-
-### 4. Holder 分析
-
-```python
-from okx_skills.analytics import analyze_holders
-
-result = analyze_holders("PEPE", "ethereum")
-print(f"Top10 集中度: {result['top10_concentration']}%")
-print(f"风险等级: {result['risk_level']}")
-```
-
-### 5. 授权管理
-
-```python
-from okx_skills.security import check_approvals
-
-result = check_approvals("0x742d...", "ethereum")
-print(f"风险分数: {result['risk']['risk_points']}")
-print(f"风险等级: {result['risk']['risk_level']}")
-```
-
-### 6. AI 决策
-
-```python
-from okx_skills.ai_brain import ai_decide
-
-decision = ai_decide(
-    signal={"token": "ETH"},
-    market={"rsi": 85, "sentiment": "extreme_greed", "trend": "up"}
-)
-print(f"决策: {decision['decision']}")
-print(f"信心度: {decision['confidence']}%")
-```
-
-### 7. 策略回测
-
-```python
-from okx_skills.ai_brain import backtest_strategy
-
-result = backtest_strategy("趋势跟踪", "ETH", 30)
-print(f"胜率: {result['win_rate']}%")
-print(f"总盈亏: {result['total_pnl_pct']}%")
-```
-
-### 8. 交易前体检 + 拆单
-
-```python
-from okx_skills.trade_guard import pre_trade_check, plan_order_slices
-
-check = pre_trade_check("ETH", "USDC", 1, chain="ethereum", wallet_address="0x742d...")
-print(check["decision"], check["risk_score"])
-
-plan = plan_order_slices("ETH", "USDC", 50, chain="ethereum")
-print(plan["recommended_slices"], plan["estimated_slice_impact_pct"])
-```
-
-### 9. 路由质量快照
-
-```python
-from okx_skills.trade_guard import route_insight
-
-route = route_insight("ETH", "USDC", "ethereum")
-print(route["quality"], route["message"])
-```
-
-### 10. 私有交易模板 + 交易模拟 + 授权撤销流
-
-```python
-from okx_skills.trade_guard import build_private_tx_strategy, simulate_trade, revoke_high_risk_approvals
-
-private_tpl = build_private_tx_strategy("ethereum", trade_usd=5000, slippage_pct=0.8)
-sim = simulate_trade("ETH", "USDC", 1, "ethereum", "0x742d...")
-dry_run = revoke_high_risk_approvals("0x742d...", "ethereum", execute=False)
-```
-
----
-
-## CLI 命令
-
-```bash
-# 查余额
-python ai_assistant/main.py portfolio 0x...
-
-# 查价格
-python ai_assistant/main.py price ETH
-
-# 搜代币
-python ai_assistant/main.py search PEPE
-
-# 智能分析
-python ai_assistant/main.py analyze PEPE
-
-# 交易计划
-python ai_assistant/main.py plan ETH BUY 100 ethereum
-
-# 交易前体检
+# 单命令模式（推荐新手）
 python ai_assistant/main.py precheck ETH USDC 1 ethereum 0x...
-
-# 大单拆单
-python ai_assistant/main.py split ETH USDC 50 ethereum
-
-# 路由质量
-python ai_assistant/main.py route ETH USDC ethereum
-
-# 私有交易模板
-python ai_assistant/main.py private ethereum 5000 0.8
-
-# 交易模拟（可执行/阻断）
 python ai_assistant/main.py simulate ETH USDC 1 ethereum 0x...
-
-# 高风险授权撤销（先 dry-run，再 execute）
+python ai_assistant/main.py private ethereum 5000 0.8
 python ai_assistant/main.py revoke 0x... ethereum
-python ai_assistant/main.py revoke 0x... ethereum execute
-python ai_assistant/main.py revoke 0x... ethereum execute live
-
-# 一键演示脚本
-python painkiller_demo.py --chain ethereum --wallet 0x...
 ```
 
----
+### 命令说明
 
-## 环境变量
+| 命令 | 用途 | 新手建议 |
+|---|---|---|
+| `precheck` | 下单前体检 | 先看 `decision` 和 `risk_score` |
+| `simulate` | 执行前预演 | 看 `status`、`worst_case_receive` |
+| `private` | 防夹交易模板 | 保留默认参数即可 |
+| `revoke` | 高风险授权清理 | 先 dry-run，再决定 execute |
+
+## 4. Web 页面使用
 
 ```bash
-# OKX API (可选，使用内置测试密钥)
-export OKX_API_KEY="your-key"
-export OKX_SECRET_KEY="your-secret"
-export OKX_PASSPHRASE="your-passphrase"
+python web_ui/main.py
+```
 
-# Flask
-export FLASK_ENV=development
+浏览器打开：`http://127.0.0.1:5000`
 
-# 真实授权撤销（live）签名密钥
+页面里同样有：
+- 交易前体检
+- 交易模拟
+- 私有交易模板
+- 授权撤销（dry-run / execute / live）
+
+## 5. 环境变量（按需配置）
+
+### 5.1 可选：接入 OpenClaw 大模型
+
+```bash
+export OPENCLAW_API_URL="http://127.0.0.1:8080"
+export OPENCLAW_MODEL="anthropic/MiniMax-M2.5"
+```
+
+如果不配置，项目也可以运行，会使用本地 fallback 逻辑。
+
+### 5.2 可选：真实上链撤销授权（高风险）
+
+```bash
 export EVM_PRIVATE_KEY="0x..."
 ```
 
----
+然后才可以执行：
 
-## 依赖
-
-```
-requests>=2.28.0
-flask>=2.3.0
-flask-cors>=4.0.0
-jinja2>=3.1.0
-python-dotenv>=1.0.0
-web3>=6.20.0
+```bash
+python ai_assistant/main.py revoke 0x... ethereum execute live
 ```
 
----
+安全建议：
+- 永远先执行 dry-run：`revoke 0x... ethereum`
+- 小额钱包先试，再用于主钱包
+- 私钥只放本地环境变量，不要写入代码或提交 Git
 
-## Changelog
+## 6. 项目结构（整理后）
 
-### v3.1 (2026-03-08)
-- 修复关键 bug：`track_address` 报错、Holder 分布计算错误、CLI 参数边界崩溃
-- 新增交易痛点功能：交易前体检（Pre-trade Check）+ 大单拆单计划（Order Slicing）
-- Web 新增“交易体检”面板，CLI 新增 `precheck`/`split` 命令
+```text
+okx-onchain-assistant/
+├── ai_assistant/               # CLI 入口
+├── web_ui/                     # Web 入口
+├── okx_skills/                 # 核心能力模块
+├── tests/                      # 单元测试
+├── painkiller_demo.py          # 一键演示脚本
+├── submission_assets/          # 参赛材料（截图/文档）
+└── docs/                       # 新手文档与 FAQ
+```
 
-### v3.2 (2026-03-08)
-- 交易风控切换为“真实数据优先”：DexScreener（价格/流动性/路由）、GoPlus（合约安全/授权风险）、链上 RPC（实时 Gas）
-- 体检新增 MEV/被夹风险评分（sandwich risk）
-- 新增路由质量功能（`route_insight` + CLI `route` + Web `/api/route`）
+## 7. 新手建议工作流
 
-### v3.3 (2026-03-08)
-- 新增私有交易防夹模板（按链输出 anti-sandwich 参数）
-- 新增交易模拟（`simulate_trade`）：输出可执行/阻断与 tx template
-- 新增高风险授权撤销流（`revoke_high_risk_approvals`）：支持 dry-run 与 execute
+1. 先跑 `precheck` 看风险  
+2. 再跑 `simulate` 看最坏成交  
+3. 再看 `private` 模板防夹  
+4. 最后再考虑 `revoke` 清理授权  
+
+这套流程比直接 swap 更适合小白，能显著减少误操作。
+
+## 8. 深入文档
+
+- [新手完整教程](docs/quickstart_zh.md)
+- [常见问题排查](docs/faq_zh.md)
+- [参赛材料汇总](submission_assets/docs/competition_submission_cn.md)
+- [提示词清单](submission_assets/docs/prompt_templates_cn.md)
+
+## 9. 开发与测试
+
+```bash
+python -m unittest discover -s tests -p "test_*.py" -q
+python -m compileall -q .
+```
+
+## 10. Changelog（最近）
 
 ### v3.4 (2026-03-08)
-- 新增真实上链撤销授权能力（`execute live`，需 `EVM_PRIVATE_KEY`）
-- 新增比赛一键演示脚本：`painkiller_demo.py`
-- Web 新增 live 撤销模式
+- 新增真实上链撤销授权能力（`revoke ... execute live`）
+- 新增一键演示脚本 `painkiller_demo.py`
+- Web 支持 live revoke
 
-### v3.0 (2026-03-08)
-- AI 独有能力：24/7 监控、多链监控、情绪管理
-- 策略回测、异常检测、社交监听
-
-### v2.2 (2026-03-08)
-- 授权管理、Gas 预警、钱包监控
-- 套利扫描、新池子监控、闪电贷检测
-
-### v2.1 (2026-03-08)
-- Holder 分析、池子分析、代币热度
-- 交易机器人、跨链桥
-
-### v1.0 (2026-03-07)
-- 初始版本
-
----
-
-## GitHub
-
-https://github.com/0xUnite/okx-onchain-assistant
+### v3.3 (2026-03-08)
+- 新增私有交易防夹模板（`private`）
+- 新增交易模拟（`simulate_trade`）
+- 新增授权撤销流（dry-run + execute）
