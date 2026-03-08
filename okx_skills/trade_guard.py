@@ -435,6 +435,8 @@ class TradeGuard:
         wallet_address: str,
         chain: str = "ethereum",
         execute: bool = False,
+        live_execute: bool = False,
+        private_key: str = None,
         max_items: int = 8,
     ) -> Dict:
         """高风险授权撤销流：支持 dry-run / execute。"""
@@ -446,15 +448,16 @@ class TradeGuard:
             }
 
         candidates: List[Dict] = []
-        live = self.client.get_wallet_approval_risk(wallet_address, chain)
-        if live.get("available"):
-            for item in live.get("items", []):
+        live_data = self.client.get_wallet_approval_risk(wallet_address, chain)
+        if live_data.get("available"):
+            for item in live_data.get("items", []):
                 if item.get("is_infinite") or item.get("is_risky"):
                     spender = (item.get("spender") or "").strip()
                     if spender and spender != "N/A":
                         candidates.append(
                             {
                                 "token": item.get("token") or "UNKNOWN",
+                                "token_address": item.get("token_address") or item.get("token_contract") or item.get("contract_address"),
                                 "spender": spender,
                                 "reason": "infinite_or_risky",
                             }
@@ -467,6 +470,7 @@ class TradeGuard:
                     candidates.append(
                         {
                             "token": approval.token,
+                            "token_address": self.client.resolve_token(approval.token, chain).get("address"),
                             "spender": approval.spender,
                             "reason": "fallback_high_risk",
                         }
@@ -490,21 +494,43 @@ class TradeGuard:
                 "selected_count": len(selected),
                 "estimated_total_fee_usd": est_fee_total,
                 "candidates": selected,
-                "source": live.get("source") if live.get("available") else "fallback/local",
-                "next_action": "确认后传 execute=True 执行撤销",
+                "source": live_data.get("source") if live_data.get("available") else "fallback/local",
+                "next_action": "确认后传 execute=True 执行撤销；若要真实上链，再加 live=True",
                 "timestamp": _now(),
             }
 
         results = []
         for item in selected:
-            revoke = self.approval_manager.revoke_approval(item["token"], item["spender"], chain)
+            if live_execute:
+                token_address = item.get("token_address")
+                if not token_address:
+                    results.append(
+                        {
+                            "token": item["token"],
+                            "spender": item["spender"],
+                            "status": "error",
+                            "message": "缺少 token_address，无法真实上链撤销",
+                        }
+                    )
+                    continue
+                revoke = self.approval_manager.revoke_approval_onchain(
+                    token_address=token_address,
+                    spender=item["spender"],
+                    chain=chain,
+                    private_key=private_key,
+                )
+            else:
+                revoke = self.approval_manager.revoke_approval(item["token"], item["spender"], chain)
             results.append(
                 {
                     "token": item["token"],
+                    "token_address": item.get("token_address"),
                     "spender": item["spender"],
                     "status": revoke["status"],
                     "tx_hash": revoke.get("tx_hash"),
                     "message": revoke.get("message"),
+                    "mode": revoke.get("mode", "simulated"),
+                    "explorer": revoke.get("explorer"),
                 }
             )
 
@@ -513,6 +539,7 @@ class TradeGuard:
             "status": "executed",
             "wallet_address": wallet_address,
             "chain": chain,
+            "live": live_execute,
             "attempted": len(selected),
             "succeeded": success_count,
             "estimated_total_fee_usd": est_fee_total,
@@ -655,6 +682,8 @@ def revoke_high_risk_approvals(
     wallet_address: str,
     chain: str = "ethereum",
     execute: bool = False,
+    live: bool = False,
+    private_key: str = None,
     max_items: int = 8,
 ) -> Dict:
-    return _guard.revoke_high_risk_approvals(wallet_address, chain, execute, max_items)
+    return _guard.revoke_high_risk_approvals(wallet_address, chain, execute, live, private_key, max_items)

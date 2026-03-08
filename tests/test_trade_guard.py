@@ -55,6 +55,16 @@ class TradeGuardTest(unittest.TestCase):
         self.assertEqual(result["status"], "dry_run")
         self.assertIn("candidates", result)
 
+    def test_revoke_flow_live_execute_shape(self):
+        result = revoke_high_risk_approvals(
+            "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+            "ethereum",
+            execute=True,
+            live=True,
+        )
+        self.assertEqual(result["status"], "executed")
+        self.assertIn("results", result)
+
 
 if __name__ == "__main__":
     unittest.main()

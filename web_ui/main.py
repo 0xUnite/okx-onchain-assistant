@@ -230,10 +230,11 @@ HTML = """
                     </select>
                     <select id="revokeMode">
                         <option value="dry_run">Dry Run</option>
-                        <option value="execute">Execute</option>
+                        <option value="execute">Execute (Simulated)</option>
+                        <option value="execute_live">Execute (Live Onchain)</option>
                     </select>
                     <button onclick="runRevokeFlow()">运行撤销流</button>
-                    <div class="result" id="revokeResult">先预演高风险授权，再决定是否执行</div>
+                    <div class="result" id="revokeResult">先预演高风险授权，再决定是否执行（Live需 EVM_PRIVATE_KEY）</div>
                 </div>
             </div>
         </div>
@@ -450,7 +451,8 @@ HTML = """
             const result = await apiCall('/api/revoke', {
                 wallet_address: walletAddress,
                 chain,
-                execute: mode === 'execute',
+                execute: mode === 'execute' || mode === 'execute_live',
+                live: mode === 'execute_live',
             });
             document.getElementById('revokeResult').textContent = JSON.stringify(result, null, 2);
         }
@@ -571,6 +573,8 @@ def revoke():
         wallet_address=data.get('wallet_address', ''),
         chain=data.get('chain', 'ethereum'),
         execute=bool(data.get('execute', False)),
+        live=bool(data.get('live', False)),
+        private_key=data.get('private_key'),
         max_items=int(data.get('max_items', 8)),
     )
     return jsonify(result)

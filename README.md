@@ -78,6 +78,9 @@ python web_ui/main.py
 
 # CLI 助手
 python ai_assistant/main.py
+
+# 一键痛点演示（precheck -> simulate -> private -> revoke）
+python painkiller_demo.py
 ```
 
 ---
@@ -242,6 +245,10 @@ python ai_assistant/main.py simulate ETH USDC 1 ethereum 0x...
 # 高风险授权撤销（先 dry-run，再 execute）
 python ai_assistant/main.py revoke 0x... ethereum
 python ai_assistant/main.py revoke 0x... ethereum execute
+python ai_assistant/main.py revoke 0x... ethereum execute live
+
+# 一键演示脚本
+python painkiller_demo.py --chain ethereum --wallet 0x...
 ```
 
 ---
@@ -256,6 +263,9 @@ export OKX_PASSPHRASE="your-passphrase"
 
 # Flask
 export FLASK_ENV=development
+
+# 真实授权撤销（live）签名密钥
+export EVM_PRIVATE_KEY="0x..."
 ```
 
 ---
@@ -268,6 +278,7 @@ flask>=2.3.0
 flask-cors>=4.0.0
 jinja2>=3.1.0
 python-dotenv>=1.0.0
+web3>=6.20.0
 ```
 
 ---
@@ -288,6 +299,11 @@ python-dotenv>=1.0.0
 - 新增私有交易防夹模板（按链输出 anti-sandwich 参数）
 - 新增交易模拟（`simulate_trade`）：输出可执行/阻断与 tx template
 - 新增高风险授权撤销流（`revoke_high_risk_approvals`）：支持 dry-run 与 execute
+
+### v3.4 (2026-03-08)
+- 新增真实上链撤销授权能力（`execute live`，需 `EVM_PRIVATE_KEY`）
+- 新增比赛一键演示脚本：`painkiller_demo.py`
+- Web 新增 live 撤销模式
 
 ### v3.0 (2026-03-08)
 - AI 独有能力：24/7 监控、多链监控、情绪管理

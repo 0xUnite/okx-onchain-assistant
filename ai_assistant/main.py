@@ -391,13 +391,14 @@ Gas: {result['gas_snapshot']['gas_price']} {result['gas_snapshot']['unit']}
 
     # 授权撤销流
     elif command.startswith("revoke "):
-        # revoke 0x... ethereum execute
+        # revoke 0x... ethereum execute live
         if len(parts) < 2:
-            return "格式错误，示例: revoke 0x... ethereum execute"
+            return "格式错误，示例: revoke 0x... ethereum execute live"
         wallet = parts[1]
         chain = parts[2] if len(parts) > 2 else "ethereum"
         execute = len(parts) > 3 and parts[3] in {"run", "execute", "yes", "true"}
-        result = revoke_high_risk_approvals(wallet, chain, execute=execute)
+        live = len(parts) > 4 and parts[4] in {"live", "onchain", "real"}
+        result = revoke_high_risk_approvals(wallet, chain, execute=execute, live=live)
 
         if result.get("status") == "dry_run":
             rows = [
@@ -415,10 +416,11 @@ Gas: {result['gas_snapshot']['gas_price']} {result['gas_snapshot']['unit']}
 
 执行方式:
 revoke {wallet} {chain} execute
+revoke {wallet} {chain} execute live
 """
 
         rows = [
-            f"- {r['token']} -> {r['spender']} | {r['status']} | {r.get('tx_hash')}"
+            f"- {r['token']} -> {r['spender']} | {r['status']} | {r.get('tx_hash')} | {r.get('message')}"
             for r in result.get("results", [])
         ]
         return f"""
@@ -451,6 +453,7 @@ revoke {wallet} {chain} execute
 - private <链> [交易额USD] [滑点%] - 私有交易防夹模板
 - simulate <从> <到> <数量> [链] [钱包地址] - 交易模拟（可执行/阻断）
 - revoke <钱包> [链] [execute] - 高风险授权撤销（默认dry-run）
+- revoke <钱包> [链] [execute] [live] - 授权撤销（live=真实上链，需 EVM_PRIVATE_KEY）
 
 示例:
   price ETH
@@ -464,6 +467,7 @@ revoke {wallet} {chain} execute
   simulate ETH USDC 1 ethereum 0xabc...
   revoke 0xabc... ethereum
   revoke 0xabc... ethereum execute
+  revoke 0xabc... ethereum execute live
 """
     
     else:
