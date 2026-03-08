@@ -127,7 +127,7 @@ class TradingBot:
             try:
                 price_data = get_price(p.token, p.chain)
                 p.current_price = price_data["price"]
-            except:
+            except Exception:
                 p.current_price = p.entry_price  # 如果获取失败，使用入场价
             
             # 计算盈亏
@@ -180,9 +180,9 @@ class TradingBot:
             "total_trades": total,
             "wins": wins,
             "losses": losses,
-nl": round(total_pnl, 2),
-            "": losses,
-                       "total_pavg_pnl": round(total_pnl / total, 2) if total > 0 else 0,
+            "total_pnl": round(total_pnl, 2),
+            "win_rate": round(win_rate, 2),
+            "avg_pnl": round(total_pnl / total, 2) if total > 0 else 0,
             "timestamp": datetime.now().isoformat()
         }
     

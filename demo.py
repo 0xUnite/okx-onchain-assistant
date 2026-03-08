@@ -7,6 +7,7 @@ from okx_skills.scanner import NewTokenScanner, GasPredictor, SmartMoneyRadar
 from okx_skills.audit import ContractAuditor
 from okx_skills.analytics import OnchainAnalytics
 from okx_skills.trading_bot import TradingBot
+from okx_skills.trade_guard import pre_trade_check, plan_order_slices
 
 def demo_full_workflow():
     """完整工作流演示"""
@@ -66,8 +67,19 @@ def demo_full_workflow():
     print(f"  总流出: ${flows['total_outflow_usd']:,.0f}")
     print(f"  信号: {flows['signal']}")
     
-    # Step 6: 开仓交易
-    print("\n📍 Step 6: 开仓交易")
+    # Step 6: 交易前体检
+    print("\n📍 Step 6: 交易前体检")
+    print("-" * 40)
+    check = pre_trade_check("ETH", "USDC", 1, "ethereum", "0x742d35Cc6634C0532925a3b844Bc9e7595f")
+    print(f"  结论: {check['decision']}")
+    print(f"  风险分: {check['risk_score']}/100")
+    print(f"  关键提示: {check['warnings'][0] if check['warnings'] else '无'}")
+
+    split = plan_order_slices("ETH", "USDC", 30, "ethereum")
+    print(f"  大单建议拆分: {split['recommended_slices']} 笔")
+
+    # Step 7: 开仓交易
+    print("\n📍 Step 7: 开仓交易")
     print("-" * 40)
     price_data = client.get_price("WETH", "ethereum")
     current_price = price_data["price"]
@@ -95,16 +107,16 @@ def demo_full_workflow():
     print(f"  开仓结果: {open_result['message']}")
     print(f"  交易Hash: {open_result['tx_hash'][:20]}...")
     
-    # Step 7: 检查仓位
-    print("\n📍 Step 7: 仓位管理")
+    # Step 8: 检查仓位
+    print("\n📍 Step 8: 仓位管理")
     print("-" * 40)
     positions = bot.get_open_positions()
     for p in positions:
         print(f"  仓位 #{p['id']}: {p['side']} {p['quantity']} {p['token']} @ ${p['entry_price']}")
         print(f"    状态: {p['status']}")
     
-    # Step 8: 盈亏统计
-    print("\n📍 Step 8: 盈亏统计")
+    # Step 9: 盈亏统计
+    print("\n📍 Step 9: 盈亏统计")
     print("-" * 40)
     # 模拟平仓（价格变动）
     close_result = bot.close_position(positions[0]["id"], current_price * 1.02, "TP")

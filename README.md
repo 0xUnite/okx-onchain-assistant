@@ -18,6 +18,7 @@ okx-onchain-assistant/
 │   ├── security.py         # 授权管理 + Gas 预警
 │   ├── monitor.py          # 套利扫描 + 闪电贷检测
 │   ├── trading_bot.py      # 自动交易机器人
+│   ├── trade_guard.py      # 交易前体检 + 大单拆单
 │   └── ai_brain.py        # AI 决策 + 回测
 ├── web_ui/                  # Web 仪表盘
 ├── ai_assistant/            # CLI 对话
@@ -36,6 +37,7 @@ okx-onchain-assistant/
 | `audit.py` | 流动性检测、增发/黑名单扫描、蜜罐识别 |
 | `trading_bot.py` | 自动开仓/平仓、止盈止损、仓位管理 |
 | `onchainos_api.py` | 钱包余额、DEX 闪兑、跨链桥 |
+| `trade_guard.py` | 下单前体检（滑点/Gas/安全/授权）+ 大单拆单计划 |
 
 ### 链上分析
 
@@ -171,6 +173,18 @@ print(f"胜率: {result['win_rate']}%")
 print(f"总盈亏: {result['total_pnl_pct']}%")
 ```
 
+### 8. 交易前体检 + 拆单
+
+```python
+from okx_skills.trade_guard import pre_trade_check, plan_order_slices
+
+check = pre_trade_check("ETH", "USDC", 1, chain="ethereum", wallet_address="0x742d...")
+print(check["decision"], check["risk_score"])
+
+plan = plan_order_slices("ETH", "USDC", 50, chain="ethereum")
+print(plan["recommended_slices"], plan["estimated_slice_impact_pct"])
+```
+
 ---
 
 ## CLI 命令
@@ -185,14 +199,17 @@ python ai_assistant/main.py price ETH
 # 搜代币
 python ai_assistant/main.py search PEPE
 
-# 审计合约
-python ai_assistant/main.py audit 0x...
+# 智能分析
+python ai_assistant/main.py analyze PEPE
 
-# 新币扫描
-python ai_assistant/main.py scan
+# 交易计划
+python ai_assistant/main.py plan ETH BUY 100 ethereum
 
-# 开仓
-python ai_assistant/main.py buy ETH 0.1
+# 交易前体检
+python ai_assistant/main.py precheck ETH USDC 1 ethereum 0x...
+
+# 大单拆单
+python ai_assistant/main.py split ETH USDC 50 ethereum
 ```
 
 ---
@@ -224,6 +241,11 @@ python-dotenv>=1.0.0
 ---
 
 ## Changelog
+
+### v3.1 (2026-03-08)
+- 修复关键 bug：`track_address` 报错、Holder 分布计算错误、CLI 参数边界崩溃
+- 新增交易痛点功能：交易前体检（Pre-trade Check）+ 大单拆单计划（Order Slicing）
+- Web 新增“交易体检”面板，CLI 新增 `precheck`/`split` 命令
 
 ### v3.0 (2026-03-08)
 - AI 独有能力：24/7 监控、多链监控、情绪管理

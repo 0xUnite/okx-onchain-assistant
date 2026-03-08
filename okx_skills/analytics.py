@@ -48,28 +48,31 @@ class OnchainAnalytics:
         for h in holders:
             h.percent = (h.balance / total) * 100 if total > 0 else 0
         
-        top10_pct = sum(h.percent for h in sorted(holders, key=lambda x: x.balance, reverse=True)[:10])
+        sorted_holders = sorted(holders, key=lambda x: x.balance, reverse=True)
+        top10_pct = sum(h.percent for h in sorted_holders[:10])
+        top50_pct = sum(h.percent for h in sorted_holders[:50])
+        rest_pct = max(0.0, 100 - top50_pct)
         
         return {
             "token": token,
             "chain": chain,
             "total_holders": len(holders),
             "top10_concentration": round(top10_pct, 2),
-            "whale_count": len([h for h in holders if h.whale]),
+            "whale_count": len([h for h in holders if h.is_whale]),
             "contract_count": len([h for h in holders if h.is_contract]),
             "distribution": {
                 "top10": round(top10_pct, 2),
-                "top50": round(sum(h.percent for h in sorted(holders, key=lambda x: x.balance, reverse=True)[:50]), 2),
-                "rest": round(100 - top10_pct - sum(h.percent for h in sorted(holders, key=lambda x: x.balance, reverse=True)[:50]), 2)
+                "top50": round(top50_pct, 2),
+                "rest": round(rest_pct, 2),
             },
             "top_holders": [
                 {
                     "address": h.address[:10] + "...",
                     "balance": round(h.balance, 4),
                     "percent": round(h.percent, 2),
-                    "is_whale": h.whale
+                    "is_whale": h.is_whale
                 }
-                for h in sorted(holders, key=lambda x: x.balance, reverse=True)[:5]
+                for h in sorted_holders[:5]
             ],
             "risk_level": "HIGH" if top10_pct > 50 else "MEDIUM" if top10_pct > 30 else "LOW",
             "timestamp": datetime.now().isoformat()
@@ -175,7 +178,10 @@ class OnchainAnalytics:
             "total_txs": len(txs),
             "total_inflow": sum(t["amount"] for t in txs if t["type"] == "IN"),
             "total_outflow": sum(t["amount"] for t in txs if t["type"] == "OUT"),
-            "favorite_dex": max(set(t["dex"] for t in txs), key=lambda x: t["dex"]),
+            "favorite_dex": max(
+                set(t["dex"] for t in txs),
+                key=lambda dex: sum(1 for tx in txs if tx["dex"] == dex),
+            ),
             "recent_transactions": txs[:5],
             "timestamp": datetime.now().isoformat()
         }
