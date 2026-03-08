@@ -4,13 +4,13 @@
 
 ## 🆚 版本对比
 
-| 功能 | Binance 版本 | OKX OnchainOS 版本 (v2.0) |
+| 功能 | Binance 版本 | OKX OnchainOS 版本 (v2.1) |
 |------|-------------|---------------------------|
 | 交易所 | Binance CEX | OKX DEX (20+链) |
 | 交易方式 | 现货/合约 | **真实链上交易** |
 | 风控 | 仓位计算器 | **Gas预测 + 交易模拟** |
 | 数据源 | Binance API | **链上实时数据** |
-| 特色 | 出货侦探 | **新币快讯 + 智能监控** |
+| 特色 | 出货侦探 | **链上全栈分析** |
 
 ---
 
@@ -23,7 +23,7 @@
 
 ---
 
-## ✨ 功能亮点 (v2.0 增强版)
+## ✨ 功能亮点 (v2.1 完整版)
 
 ### 1️⃣ 多链钱包看板
 - 一键查询 20+ 链上资产
@@ -35,37 +35,65 @@
 - AI 评分判断（≥85 分推送）
 - 防 Rug Pull 合约审计
 
-### 3️⃣ Gas 费预测器 ⛽
+### 3️⃣ 合约审计 🔍
+- 流动性锁定检测
+- 增发/黑名单风险扫描
+- 蜜罐代币识别
+- 安全分数 0-100
+
+### 4️⃣ Gas 费预测器 ⛽
 - 智能 Gas 推荐
 - 最佳交易时间建议
 - 避免高峰溢价
 
-### 4️⃣ 聪明钱雷达 🐋
+### 5️⃣ 聪明钱雷达 🐋
 - 追踪 Smart Money 地址
 - 大额流入/流出预警
 - 跟单信号生成
 
-### 5️⃣ DEX 闪兑 💱
+### 6️⃣ DEX 闪兑 💱
 - 聚合 500+ 流动性源
 - 智能路由找最优报价
 - 交易预执行 + 确认
 
-### 6️⃣ AI 智能分析 🤖
-- 基于 OpenClaw MiniMax-M2.5
-- 自然语言交易指令
-- 策略回测与优化
+### 7️⃣ Holder 分析 📊
+- 持币地址分布
+- Top holder 持仓占比
+- 集中度风险评估
+
+### 8️⃣ 池子分析 🏊
+- DEX 池子深度
+- 流动性排名
+- 滑点预估
+
+### 9️⃣ 代币热度 🔥
+- 社交媒体热度
+- 趋势排名
+- 情绪分析
+
+### 🔟 跨链桥 🌉
+- 多链报价对比
+- 最低费用最优
+- 跨链时间估算
+
+### 1️⃣1️⃣ 地址追踪 🔎
+- 历史交易记录
+- 常用 DEX 分析
+- 资金流向追踪
+
+### 1️⃣2️⃣ 交易机器人 🤖
+- 自动开仓/平仓
+- 止盈止损自动化
+- 仓位管理
+- 盈亏统计
 
 ---
 
-## 🔄 真实交易闭环
+## 🔄 完整交易闭环
 
 ```
-监控发现 → AI评分 → 合约审计 → Gas优化 → 交易执行 → 链上确认
+监控发现 → AI评分 → 合约审计 → Holder分析 → Gas优化 → 开仓 → 自动风控 → 平仓
 ```
-
-**已验证交易记录**:
-- ETH → USDC: `0x...abc123`
-- BSC: BNB ↔ USDT 双向验证
 
 ---
 
@@ -74,8 +102,8 @@
 ✅ **不是"调用 OKX API 的 Bot"**
 → **而是"OKX OnchainOS 原生 AI Agent"**
 
-✅ 全自动化扫描 + 审计 + 交易
-✅ 错误自动学习进化
+✅ 链上数据全覆盖（从发现到平仓）
+✅ 自动化交易 + 风控
 ✅ 多链支持 20+
 ✅ 真实链上交易闭环
 
@@ -86,18 +114,19 @@
 ```
 okx-onchain-assistant/
 ├── web_ui/              # Web 仪表盘 (Flask)
-├── api_server/          # REST API
-├── okx_skills/          # OnchainOS 技能
-│   ├── wallet.py        # 钱包管理
-│   ├── scanner.py       # 新币扫描 + AI评分
-│   ├── audit.py         # 合约审计
-│   ├── market.py        # 市场数据
-│   ├── swap.py          # DEX 闪兑
-│   └── gateway.py       # 链上交易
-├── ai_assistant/        # AI 对话
+├── api_server/         # REST API
+├── okx_skills/         # OnchainOS 技能
+│   ├── onchainos_api.py   # API 封装
+│   ├── scanner.py         # 新币扫描 + AI评分
+│   ├── audit.py           # 合约审计
+│   ├── analytics.py       # Holder/池子/热度分析
+│   ├── trading_bot.py     # 交易机器人
+│   ├── market.py          # 市场数据
+│   ├── swap.py           # DEX 闪兑
+│   └── gateway.py        # 链上交易
+├── ai_assistant/      # AI 对话
 └── utils/
-    ├── onchainos_api.py # OKX API 封装
-    └── config.py        # 配置
+    └── config.py       # 配置
 ```
 
 ---
@@ -114,9 +143,6 @@ pip install -r requirements.txt
 
 # 启动 Web 仪表盘
 python web_ui/main.py
-
-# 或启动 API 服务
-python api_server/main.py
 
 # 或使用 CLI 助手
 python ai_assistant/main.py
@@ -137,12 +163,15 @@ python ai_assistant/main.py price ETH
 # 新币扫描
 python ai_assistant/main.py scan
 
-# 执行交易
-python ai_assistant/main.py swap ETH USDC 0.1
-```
+# 合约审计
+python ai_assistant/main.py audit 0x...
 
-### Web 仪表盘
-访问 http://localhost:3000
+# Holder分析
+python ai_assistant/main.py holders PEPE
+
+# 开仓
+python ai_assistant/main.py buy ETH 0.1
+```
 
 ---
 
@@ -173,12 +202,20 @@ python ai_assistant/main.py swap ETH USDC 0.1
 
 ## 📝 Changelog
 
+### v2.1 (2026-03-08)
+- ✨ 新增 Holder 分析（持币分布、集中度）
+- ✨ 新增池子分析（DEX 深度、滑点）
+- ✨ 新增代币热度指标
+- ✨ 新增跨链桥报价
+- ✨ 新增地址追踪
+- ✨ 新增交易机器人（自动开平仓、止盈止损）
+- ✅ 链上交易闭环完整
+
 ### v2.0 (2026-03-08)
 - ✨ 新增新币监控器 (AI 评分 + 合约审计)
 - ✨ 新增 Gas 费预测器
 - ✨ 新增聪明钱雷达
 - ✅ 实现真实链上交易闭环
-- 🔧 优化多链支持至 20+
 
 ### v1.0 (2026-03-07)
 - 🎉 初始版本
