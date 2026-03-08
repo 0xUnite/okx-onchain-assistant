@@ -1,0 +1,15 @@
+==================================================
+🤖 OKX OnchainOS AI Assistant
+==================================================
+
+
+🕶️ 私有交易防夹模板 (ethereum)
+
+模式: private_relay_preferred
+紧急度: MEDIUM
+推荐通道: flashbots-protect, mev-blocker-rpc
+Gas: 0.074729 Gwei
+
+模板:
+{'send_mode': 'private_first_fallback_public', 'max_slippage_pct': 0.8, 'max_priority_fee_gwei': 2.5, 'nonce_strategy': 'single_pending_nonce', 'deadline_seconds': 90, 'allow_backrun': False}
+

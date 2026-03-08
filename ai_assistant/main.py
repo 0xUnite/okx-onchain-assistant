@@ -3,12 +3,25 @@ OKX OnchainOS AI Assistant
 使用 OpenClaw AI 进行智能对话
 """
 import os
-import json
 import sys
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from okx_skills.onchainos_api import (
     get_portfolio, get_price, search_token, 
     get_swap_quote, execute_swap, get_smart_money_flows,
     OnchainOSClient
+)
+from okx_skills.trade_guard import (
+    pre_trade_check,
+    plan_order_slices,
+    route_insight,
+    build_private_tx_strategy,
+    simulate_trade,
+    revoke_high_risk_approvals,
 )
 
 # 使用 OpenClaw 内置 AI（通过环境变量）
@@ -98,10 +111,13 @@ Gas费用: ${gas['estimated_fee']:.4f}
 def handle_command(command: str) -> str:
     """处理用户命令"""
     command = command.lower().strip()
+    parts = command.split()
     
     # 钱包查询
     if command.startswith("portfolio ") or command.startswith("钱包 "):
-        address = command.split()[-1]
+        if len(parts) < 2:
+            return "请提供钱包地址，例如: portfolio 0x..."
+        address = parts[-1]
         portfolio = get_portfolio(address)
         return f"""
 💰 钱包组合
@@ -117,7 +133,6 @@ def handle_command(command: str) -> str:
     
     # 价格查询
     elif command.startswith("price ") or command.startswith("价格 "):
-        parts = command.split()
         token = parts[1].upper() if len(parts) > 1 else "ETH"
         chain = parts[-1] if len(parts) > 2 else "ethereum"
         
@@ -134,7 +149,9 @@ def handle_command(command: str) -> str:
     
     # 代币搜索
     elif command.startswith("search ") or command.startswith("搜索 "):
-        query = command.split()[1]
+        if len(parts) < 2:
+            return "请提供代币关键字，例如: search PEPE"
+        query = parts[1]
         token = search_token(query)
         return f"""
 🔍 代币搜索: {query}
@@ -151,14 +168,22 @@ Holder: {token.get('holders', 0):,}
     # 兑换报价
     elif "swap" in command or "兑换" in command:
         # 格式: swap ETH USDC 1
-        parts = command.replace("swap", "").replace("兑换", "").split()
-        if len(parts) >= 3:
-            from_token = parts[0].upper()
-            to_token = parts[1].upper()
-            amount = float(parts[2])
-            
-            quote = get_swap_quote(from_token, to_token, amount)
-            return f"""
+        swap_parts = command.replace("swap", "").replace("兑换", "").split()
+        if len(swap_parts) < 3:
+            return "格式错误，示例: swap ETH USDC 1"
+
+        from_token = swap_parts[0].upper()
+        to_token = swap_parts[1].upper()
+        try:
+            amount = float(swap_parts[2])
+        except ValueError:
+            return "数量格式错误，示例: swap ETH USDC 1"
+
+        quote = get_swap_quote(from_token, to_token, amount)
+        if quote.get("error"):
+            return f"报价失败: {quote['error']}"
+
+        return f"""
 🔄 兑换报价: {from_token} -> {to_token}
 
 输入: {amount} {from_token}
@@ -191,11 +216,223 @@ Gas费用: ${quote['gas_fee']:.4f}
     
     # 市场分析
     elif command.startswith("analyze ") or command.startswith("分析 "):
-        parts = command.split()
         token = parts[1].upper() if len(parts) > 1 else "ETH"
         chain = parts[-1] if len(parts) > 2 else "ethereum"
         
         return analyze_market(token, chain)
+
+    # 交易计划
+    elif command.startswith("plan "):
+        # plan ETH buy 100 ethereum
+        if len(parts) < 4:
+            return "格式错误，示例: plan ETH BUY 100 ethereum"
+        token = parts[1].upper()
+        side = parts[2].upper()
+        if side not in {"BUY", "SELL"}:
+            return "side 仅支持 BUY 或 SELL"
+        try:
+            amount = float(parts[3])
+        except ValueError:
+            return "金额格式错误，示例: plan ETH BUY 100"
+        chain = parts[4] if len(parts) > 4 else "ethereum"
+        return generate_trade_plan(token, side, amount, chain)
+
+    # 交易前体检
+    elif command.startswith("precheck "):
+        # precheck ETH USDC 1 ethereum 0x...
+        if len(parts) < 4:
+            return "格式错误，示例: precheck ETH USDC 1 ethereum 0x..."
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        try:
+            amount = float(parts[3])
+        except ValueError:
+            return "数量格式错误，示例: precheck ETH USDC 1"
+        chain = parts[4] if len(parts) > 4 else "ethereum"
+        wallet = parts[5] if len(parts) > 5 else None
+        result = pre_trade_check(from_token, to_token, amount, chain=chain, wallet_address=wallet)
+        holder_view = result["checks"]["holders"]
+        top10 = holder_view.get("top10_concentration")
+        holder_line = f"{top10}%" if top10 is not None else f"{holder_view.get('holder_count')} holders"
+
+        return f"""
+🛡️ 交易前体检 ({from_token}->{to_token}, {chain})
+
+结论: {result['decision']}
+风险分: {result['risk_score']}/100
+价格冲击: {result['checks']['quote']['price_impact']}%
+Gas 预估: ${result['checks']['gas']['estimated_fee']}
+合约分: {result['checks']['token_security']['score']}
+持仓观察: {holder_line}
+三明治风险: {result['checks']['sandwich_risk']['level']} ({result['checks']['sandwich_risk']['score']})
+
+阻断项:
+{chr(10).join(['- ' + b for b in result['blockers']]) if result['blockers'] else '- 无'}
+
+警告项:
+{chr(10).join(['- ' + w for w in result['warnings']]) if result['warnings'] else '- 无'}
+
+建议:
+{chr(10).join(['- ' + s for s in result['suggestions']])}
+"""
+
+    # 大单拆单
+    elif command.startswith("split "):
+        # split ETH USDC 50 ethereum
+        if len(parts) < 4:
+            return "格式错误，示例: split ETH USDC 50 ethereum"
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        try:
+            amount = float(parts[3])
+        except ValueError:
+            return "数量格式错误，示例: split ETH USDC 50"
+        chain = parts[4] if len(parts) > 4 else "ethereum"
+        result = plan_order_slices(from_token, to_token, amount, chain=chain)
+        if result.get("status") == "error":
+            return f"拆单失败: {result['message']}"
+
+        rows = []
+        for s in result["schedule"]:
+            rows.append(
+                f"- 第{s['index']}笔: {s['from_amount']} {from_token}, 等待{s['wait_seconds']}s, "
+                f"预计冲击 {s['estimated_price_impact_pct']}%"
+            )
+
+        return f"""
+🧩 大单拆单计划 ({from_token}->{to_token}, {chain})
+
+原始冲击: {result['original_price_impact_pct']}%
+推荐拆分: {result['recommended_slices']} 笔
+单笔预计冲击: {result['estimated_slice_impact_pct']}%
+
+执行计划:
+{chr(10).join(rows)}
+"""
+
+    # 路由质量
+    elif command.startswith("route "):
+        # route ETH USDC ethereum
+        if len(parts) < 3:
+            return "格式错误，示例: route ETH USDC ethereum"
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        chain = parts[3] if len(parts) > 3 else "ethereum"
+        result = route_insight(from_token, to_token, chain)
+        routes = result.get("routes", [])
+        if not routes:
+            return f"路由建议: {result['message']}"
+        top_lines = []
+        for item in routes[:3]:
+            top_lines.append(
+                f"- {item['dex']} | liq ${item['liquidity_usd']:,.0f} | vol24h ${item['volume_h24_usd']:,.0f}"
+            )
+        return f"""
+🧭 路由质量 ({from_token}->{to_token}, {chain})
+
+质量: {result['quality']}
+说明: {result['message']}
+
+Top Routes:
+{chr(10).join(top_lines)}
+"""
+
+    # 私有交易模板
+    elif command.startswith("private "):
+        # private ethereum 5000 0.8
+        chain = parts[1] if len(parts) > 1 else "ethereum"
+        try:
+            trade_usd = float(parts[2]) if len(parts) > 2 else 1000
+            slippage = float(parts[3]) if len(parts) > 3 else 1.0
+        except ValueError:
+            return "参数格式错误，示例: private ethereum 5000 0.8"
+        result = build_private_tx_strategy(chain, trade_usd, slippage)
+        return f"""
+🕶️ 私有交易防夹模板 ({chain})
+
+模式: {result['mode']}
+紧急度: {result['urgency']}
+推荐通道: {', '.join(result['providers'])}
+Gas: {result['gas_snapshot']['gas_price']} {result['gas_snapshot']['unit']}
+
+模板:
+{result['template']}
+"""
+
+    # 交易模拟
+    elif command.startswith("simulate "):
+        # simulate ETH USDC 1 ethereum 0x...
+        if len(parts) < 4:
+            return "格式错误，示例: simulate ETH USDC 1 ethereum 0x..."
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        try:
+            amount = float(parts[3])
+        except ValueError:
+            return "数量格式错误，示例: simulate ETH USDC 1 ethereum"
+        chain = parts[4] if len(parts) > 4 else "ethereum"
+        wallet = parts[5] if len(parts) > 5 else None
+        result = simulate_trade(from_token, to_token, amount, chain, wallet)
+        return f"""
+🧪 交易模拟 ({from_token}->{to_token}, {chain})
+
+状态: {result['status']}
+可执行: {result['executable']}
+预期成交: {result.get('expected_receive')}
+最坏成交: {result.get('worst_case_receive')}
+风险分: {result.get('risk_score')}
+
+原因:
+{chr(10).join(['- ' + r for r in result.get('reasons', [])])}
+
+执行模板:
+{result.get('tx_template')}
+"""
+
+    # 授权撤销流
+    elif command.startswith("revoke "):
+        # revoke 0x... ethereum execute live
+        if len(parts) < 2:
+            return "格式错误，示例: revoke 0x... ethereum execute live"
+        wallet = parts[1]
+        chain = parts[2] if len(parts) > 2 else "ethereum"
+        execute = len(parts) > 3 and parts[3] in {"run", "execute", "yes", "true"}
+        live = len(parts) > 4 and parts[4] in {"live", "onchain", "real"}
+        result = revoke_high_risk_approvals(wallet, chain, execute=execute, live=live)
+
+        if result.get("status") == "dry_run":
+            rows = [
+                f"- {c['token']} -> {c['spender']} ({c['reason']})"
+                for c in result.get("candidates", [])
+            ]
+            return f"""
+🧹 授权撤销预演 ({chain})
+
+候选数量: {result['selected_count']}
+预计费用: ${result['estimated_total_fee_usd']}
+
+候选列表:
+{chr(10).join(rows) if rows else '- 无高风险授权'}
+
+执行方式:
+revoke {wallet} {chain} execute
+revoke {wallet} {chain} execute live
+"""
+
+        rows = [
+            f"- {r['token']} -> {r['spender']} | {r['status']} | {r.get('tx_hash')} | {r.get('message')}"
+            for r in result.get("results", [])
+        ]
+        return f"""
+🧹 授权撤销执行结果 ({chain})
+
+尝试: {result.get('attempted')}
+成功: {result.get('succeeded')}
+预计费用: ${result.get('estimated_total_fee_usd')}
+
+详情:
+{chr(10).join(rows) if rows else '- 无'}
+"""
     
     # 帮助
     elif command in ["help", "帮助", "?"]:
@@ -210,12 +447,27 @@ Gas费用: ${quote['gas_fee']:.4f}
 - smart [链] - Smart Money 流向
 - analyze <代币> - AI 市场分析
 - plan <代币> <买卖> <金额> - 生成交易计划
+- precheck <从> <到> <数量> [链] [钱包地址] - 交易前体检
+- split <从> <到> <数量> [链] - 大单拆单计划
+- route <从> <到> [链] - 查看路由质量/池子深度
+- private <链> [交易额USD] [滑点%] - 私有交易防夹模板
+- simulate <从> <到> <数量> [链] [钱包地址] - 交易模拟（可执行/阻断）
+- revoke <钱包> [链] [execute] - 高风险授权撤销（默认dry-run）
+- revoke <钱包> [链] [execute] [live] - 授权撤销（live=真实上链，需 EVM_PRIVATE_KEY）
 
 示例:
   price ETH
   search PEPE
   swap ETH USDC 1
   analyze PEPE
+  precheck ETH USDC 1 ethereum 0xabc...
+  split ETH USDC 50 ethereum
+  route ETH USDC ethereum
+  private ethereum 5000 0.8
+  simulate ETH USDC 1 ethereum 0xabc...
+  revoke 0xabc... ethereum
+  revoke 0xabc... ethereum execute
+  revoke 0xabc... ethereum execute live
 """
     
     else:

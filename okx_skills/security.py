@@ -2,11 +2,57 @@
 Token 授权管理 + Gas 预警 + 钱包监控
 链上交易者痛点解决方案
 """
+import os
 from datetime import datetime
 from typing import Dict, List, Optional
 from dataclasses import dataclass
 import time
 import random
+
+try:
+    from web3 import Web3
+except ImportError:  # pragma: no cover
+    Web3 = None
+
+
+EVM_CHAIN_RPC = {
+    "ethereum": "https://ethereum-rpc.publicnode.com",
+    "bsc": "https://bsc-dataseed.binance.org",
+    "base": "https://mainnet.base.org",
+    "arbitrum": "https://arb1.arbitrum.io/rpc",
+    "polygon": "https://1rpc.io/matic",
+}
+
+EVM_CHAIN_ID = {
+    "ethereum": 1,
+    "bsc": 56,
+    "polygon": 137,
+    "arbitrum": 42161,
+    "base": 8453,
+}
+
+EXPLORER_TX = {
+    "ethereum": "https://etherscan.io/tx/",
+    "bsc": "https://bscscan.com/tx/",
+    "polygon": "https://polygonscan.com/tx/",
+    "arbitrum": "https://arbiscan.io/tx/",
+    "base": "https://basescan.org/tx/",
+}
+
+ERC20_ABI_APPROVE = [
+    {
+        "constant": False,
+        "inputs": [
+            {"name": "_spender", "type": "address"},
+            {"name": "_value", "type": "uint256"},
+        ],
+        "name": "approve",
+        "outputs": [{"name": "", "type": "bool"}],
+        "payable": False,
+        "stateMutability": "nonpayable",
+        "type": "function",
+    }
+]
 
 @dataclass
 class Approval:
@@ -93,6 +139,103 @@ class TokenApprovalManager:
             "message": f"✅ 已撤销 {token} 对 {spender[:10]}... 的授权",
             "timestamp": datetime.now().isoformat()
         }
+
+    def revoke_approval_onchain(
+        self,
+        token_address: str,
+        spender: str,
+        chain: str = "ethereum",
+        private_key: str = None,
+        gas_limit: int = 80000,
+    ) -> Dict:
+        """真实链上撤销授权（approve(spender, 0)）。"""
+        chain = (chain or "ethereum").lower()
+        private_key = private_key or os.getenv("EVM_PRIVATE_KEY")
+
+        if Web3 is None:
+            return {
+                "status": "error",
+                "message": "web3 未安装，无法执行真实广播。先安装: pip install web3",
+                "timestamp": datetime.now().isoformat(),
+            }
+        if not private_key:
+            return {
+                "status": "error",
+                "message": "缺少 EVM_PRIVATE_KEY，无法签名交易",
+                "timestamp": datetime.now().isoformat(),
+            }
+        if chain not in EVM_CHAIN_RPC:
+            return {
+                "status": "error",
+                "message": f"链 {chain} 暂不支持真实撤销",
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        rpc_url = EVM_CHAIN_RPC[chain]
+        w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 15}))
+        if not w3.is_connected():
+            return {
+                "status": "error",
+                "message": f"RPC 连接失败: {rpc_url}",
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        try:
+            token = w3.to_checksum_address(token_address)
+            spender_addr = w3.to_checksum_address(spender)
+        except Exception:
+            return {
+                "status": "error",
+                "message": "token_address 或 spender 地址格式不合法",
+                "timestamp": datetime.now().isoformat(),
+            }
+
+        account = w3.eth.account.from_key(private_key)
+        contract = w3.eth.contract(address=token, abi=ERC20_ABI_APPROVE)
+        chain_id = EVM_CHAIN_ID[chain]
+
+        try:
+            nonce = w3.eth.get_transaction_count(account.address, "pending")
+            gas_price = w3.eth.gas_price
+            try:
+                estimated = contract.functions.approve(spender_addr, 0).estimate_gas({"from": account.address})
+                gas = max(gas_limit, int(estimated * 1.2))
+            except Exception:
+                gas = gas_limit
+
+            tx = contract.functions.approve(spender_addr, 0).build_transaction(
+                {
+                    "from": account.address,
+                    "nonce": nonce,
+                    "chainId": chain_id,
+                    "gas": gas,
+                    "gasPrice": gas_price,
+                }
+            )
+            signed = account.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction).hex()
+            return {
+                "status": "success",
+                "mode": "live_onchain",
+                "token_address": token,
+                "spender": spender_addr,
+                "chain": chain,
+                "from": account.address,
+                "tx_hash": tx_hash,
+                "explorer": EXPLORER_TX.get(chain, "") + tx_hash,
+                "message": "✅ 已广播真实撤销授权交易",
+                "timestamp": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            return {
+                "status": "error",
+                "mode": "live_onchain",
+                "token_address": token_address,
+                "spender": spender,
+                "chain": chain,
+                "message": f"广播失败: {str(e)}",
+                "timestamp": datetime.now().isoformat(),
+            }
 
 
 class GasAlert:

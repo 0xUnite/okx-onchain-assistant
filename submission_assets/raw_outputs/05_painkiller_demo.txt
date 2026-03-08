@@ -1,0 +1,48 @@
+========================================================================
+OKX Onchain Painkiller Demo
+========================================================================
+
+[1] Precheck
+{
+  "decision": "WARN",
+  "risk_score": 15,
+  "warnings": [
+    "安全项: proxy contract",
+    "钱包存在高风险无限授权"
+  ]
+}
+
+[2] Simulate
+{
+  "status": "EXECUTABLE_WITH_WARNINGS",
+  "expected_receive": 1931.65690643,
+  "worst_case_receive": 1923.73711311
+}
+
+[3] Private TX Strategy
+{
+  "mode": "private_relay_preferred",
+  "providers": [
+    "flashbots-protect",
+    "mev-blocker-rpc"
+  ],
+  "template": {
+    "send_mode": "private_first_fallback_public",
+    "max_slippage_pct": 0.41,
+    "max_priority_fee_gwei": 1.5,
+    "nonce_strategy": "single_pending_nonce",
+    "deadline_seconds": 90,
+    "allow_backrun": false
+  }
+}
+
+[4] Revoke High-Risk Approvals
+{
+  "status": "dry_run",
+  "selected_count": 2,
+  "attempted": null,
+  "succeeded": null,
+  "estimated_total_fee_usd": 0.0414
+}
+
+Done.

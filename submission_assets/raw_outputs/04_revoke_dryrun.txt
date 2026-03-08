@@ -1,0 +1,18 @@
+==================================================
+🤖 OKX OnchainOS AI Assistant
+==================================================
+
+
+🧹 授权撤销预演 (ethereum)
+
+候选数量: 2
+预计费用: $0.0436
+
+候选列表:
+- USDT -> 0xE592427A0AEce92De3Edee1F18C0157C7C81f0d (fallback_high_risk)
+- PEPE -> 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D (fallback_high_risk)
+
+执行方式:
+revoke 0x742d35cc6634c0532925a3b844bc9e7595f ethereum execute
+revoke 0x742d35cc6634c0532925a3b844bc9e7595f ethereum execute live
+
