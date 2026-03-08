@@ -15,7 +15,7 @@ from okx_skills.onchainos_api import (
     get_swap_quote, execute_swap, get_smart_money_flows,
     OnchainOSClient
 )
-from okx_skills.trade_guard import pre_trade_check, plan_order_slices
+from okx_skills.trade_guard import pre_trade_check, plan_order_slices, route_insight
 
 # 使用 OpenClaw 内置 AI（通过环境变量）
 OPENCLAW_API_URL = os.getenv("OPENCLAW_API_URL", "http://127.0.0.1:8080")
@@ -244,6 +244,9 @@ Gas费用: ${quote['gas_fee']:.4f}
         chain = parts[4] if len(parts) > 4 else "ethereum"
         wallet = parts[5] if len(parts) > 5 else None
         result = pre_trade_check(from_token, to_token, amount, chain=chain, wallet_address=wallet)
+        holder_view = result["checks"]["holders"]
+        top10 = holder_view.get("top10_concentration")
+        holder_line = f"{top10}%" if top10 is not None else f"{holder_view.get('holder_count')} holders"
 
         return f"""
 🛡️ 交易前体检 ({from_token}->{to_token}, {chain})
@@ -252,8 +255,9 @@ Gas费用: ${quote['gas_fee']:.4f}
 风险分: {result['risk_score']}/100
 价格冲击: {result['checks']['quote']['price_impact']}%
 Gas 预估: ${result['checks']['gas']['estimated_fee']}
-合约分: {result['checks']['audit']['score']}
-Top10集中度: {result['checks']['holders']['top10_concentration']}%
+合约分: {result['checks']['token_security']['score']}
+持仓观察: {holder_line}
+三明治风险: {result['checks']['sandwich_risk']['level']} ({result['checks']['sandwich_risk']['score']})
 
 阻断项:
 {chr(10).join(['- ' + b for b in result['blockers']]) if result['blockers'] else '- 无'}
@@ -298,6 +302,33 @@ Top10集中度: {result['checks']['holders']['top10_concentration']}%
 执行计划:
 {chr(10).join(rows)}
 """
+
+    # 路由质量
+    elif command.startswith("route "):
+        # route ETH USDC ethereum
+        if len(parts) < 3:
+            return "格式错误，示例: route ETH USDC ethereum"
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        chain = parts[3] if len(parts) > 3 else "ethereum"
+        result = route_insight(from_token, to_token, chain)
+        routes = result.get("routes", [])
+        if not routes:
+            return f"路由建议: {result['message']}"
+        top_lines = []
+        for item in routes[:3]:
+            top_lines.append(
+                f"- {item['dex']} | liq ${item['liquidity_usd']:,.0f} | vol24h ${item['volume_h24_usd']:,.0f}"
+            )
+        return f"""
+🧭 路由质量 ({from_token}->{to_token}, {chain})
+
+质量: {result['quality']}
+说明: {result['message']}
+
+Top Routes:
+{chr(10).join(top_lines)}
+"""
     
     # 帮助
     elif command in ["help", "帮助", "?"]:
@@ -314,6 +345,7 @@ Top10集中度: {result['checks']['holders']['top10_concentration']}%
 - plan <代币> <买卖> <金额> - 生成交易计划
 - precheck <从> <到> <数量> [链] [钱包地址] - 交易前体检
 - split <从> <到> <数量> [链] - 大单拆单计划
+- route <从> <到> [链] - 查看路由质量/池子深度
 
 示例:
   price ETH
@@ -322,6 +354,7 @@ Top10集中度: {result['checks']['holders']['top10_concentration']}%
   analyze PEPE
   precheck ETH USDC 1 ethereum 0xabc...
   split ETH USDC 50 ethereum
+  route ETH USDC ethereum
 """
     
     else:

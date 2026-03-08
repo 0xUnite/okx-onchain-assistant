@@ -15,7 +15,7 @@ from okx_skills.onchainos_api import (
     OnchainOSClient, get_portfolio, get_price, search_token,
     get_swap_quote, execute_swap, get_smart_money_flows
 )
-from okx_skills.trade_guard import pre_trade_check, plan_order_slices
+from okx_skills.trade_guard import pre_trade_check, plan_order_slices, route_insight
 
 app = Flask(__name__)
 client = OnchainOSClient()
@@ -172,6 +172,18 @@ HTML = """
                     </select>
                     <button onclick="runSplitPlan()">生成拆单计划</button>
                     <div class="result" id="sliceResult">降低单笔冲击，减少被夹和吃滑点</div>
+                </div>
+                <div class="card">
+                    <h3>🧭 路由质量快照</h3>
+                    <input type="text" id="routeFromToken" placeholder="输入代币 (ETH)" value="ETH">
+                    <input type="text" id="routeToToken" placeholder="目标代币 (USDC)" value="USDC">
+                    <select id="routeChain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="bsc">BSC</option>
+                        <option value="base">Base</option>
+                    </select>
+                    <button onclick="runRouteInsight()">查询路由</button>
+                    <div class="result" id="routeResult">查看可用池子、流动性和24h成交量</div>
                 </div>
             </div>
         </div>
@@ -334,6 +346,19 @@ HTML = """
             });
             document.getElementById('sliceResult').textContent = JSON.stringify(result, null, 2);
         }
+
+        async function runRouteInsight() {
+            const fromToken = document.getElementById('routeFromToken').value;
+            const toToken = document.getElementById('routeToToken').value;
+            const chain = document.getElementById('routeChain').value;
+            document.getElementById('routeResult').textContent = '查询中...';
+            const result = await apiCall('/api/route', {
+                from_token: fromToken,
+                to_token: toToken,
+                chain,
+            });
+            document.getElementById('routeResult').textContent = JSON.stringify(result, null, 2);
+        }
         
         async function getSmartMoney() {
             const chain = document.getElementById('smartChain').value;
@@ -408,6 +433,16 @@ def split_plan():
         from_token=data.get('from_token', 'ETH'),
         to_token=data.get('to_token', 'USDC'),
         amount=float(data.get('amount', 1)),
+        chain=data.get('chain', 'ethereum'),
+    )
+    return jsonify(result)
+
+@app.route('/api/route', methods=['POST'])
+def route_quality():
+    data = request.json or {}
+    result = route_insight(
+        from_token=data.get('from_token', 'ETH'),
+        to_token=data.get('to_token', 'USDC'),
         chain=data.get('chain', 'ethereum'),
     )
     return jsonify(result)

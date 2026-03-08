@@ -37,7 +37,7 @@ okx-onchain-assistant/
 | `audit.py` | 流动性检测、增发/黑名单扫描、蜜罐识别 |
 | `trading_bot.py` | 自动开仓/平仓、止盈止损、仓位管理 |
 | `onchainos_api.py` | 钱包余额、DEX 闪兑、跨链桥 |
-| `trade_guard.py` | 下单前体检（滑点/Gas/安全/授权）+ 大单拆单计划 |
+| `trade_guard.py` | 下单前体检（滑点/Gas/安全/授权/MEV）+ 大单拆单 + 路由质量 |
 
 ### 链上分析
 
@@ -185,6 +185,15 @@ plan = plan_order_slices("ETH", "USDC", 50, chain="ethereum")
 print(plan["recommended_slices"], plan["estimated_slice_impact_pct"])
 ```
 
+### 9. 路由质量快照
+
+```python
+from okx_skills.trade_guard import route_insight
+
+route = route_insight("ETH", "USDC", "ethereum")
+print(route["quality"], route["message"])
+```
+
 ---
 
 ## CLI 命令
@@ -210,6 +219,9 @@ python ai_assistant/main.py precheck ETH USDC 1 ethereum 0x...
 
 # 大单拆单
 python ai_assistant/main.py split ETH USDC 50 ethereum
+
+# 路由质量
+python ai_assistant/main.py route ETH USDC ethereum
 ```
 
 ---
@@ -246,6 +258,11 @@ python-dotenv>=1.0.0
 - 修复关键 bug：`track_address` 报错、Holder 分布计算错误、CLI 参数边界崩溃
 - 新增交易痛点功能：交易前体检（Pre-trade Check）+ 大单拆单计划（Order Slicing）
 - Web 新增“交易体检”面板，CLI 新增 `precheck`/`split` 命令
+
+### v3.2 (2026-03-08)
+- 交易风控切换为“真实数据优先”：DexScreener（价格/流动性/路由）、GoPlus（合约安全/授权风险）、链上 RPC（实时 Gas）
+- 体检新增 MEV/被夹风险评分（sandwich risk）
+- 新增路由质量功能（`route_insight` + CLI `route` + Web `/api/route`）
 
 ### v3.0 (2026-03-08)
 - AI 独有能力：24/7 监控、多链监控、情绪管理
