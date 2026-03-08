@@ -101,6 +101,76 @@ class TradeGuard:
             "timestamp": _now(),
         }
 
+    def build_private_tx_strategy(
+        self,
+        chain: str = "ethereum",
+        trade_usd: float = 1000,
+        slippage_pct: float = 1.0,
+    ) -> Dict:
+        """按链输出 anti-sandwich 私有交易参数模板。"""
+        chain = (chain or "ethereum").lower()
+        trade_usd = float(trade_usd or 0)
+        slippage_pct = float(slippage_pct or 0)
+        gas = self.client.estimate_gas(chain)
+
+        urgency = "LOW"
+        if trade_usd >= 20_000 or slippage_pct >= 2:
+            urgency = "HIGH"
+        elif trade_usd >= 5_000 or slippage_pct >= 1:
+            urgency = "MEDIUM"
+
+        providers = []
+        mode = "public_mempool"
+        template = {}
+
+        if chain in {"ethereum", "base", "arbitrum"}:
+            mode = "private_relay_preferred"
+            providers = ["flashbots-protect", "mev-blocker-rpc"]
+            template = {
+                "send_mode": "private_first_fallback_public",
+                "max_slippage_pct": min(1.2, max(0.3, slippage_pct)),
+                "max_priority_fee_gwei": 1.5 if urgency == "LOW" else 2.5 if urgency == "MEDIUM" else 4.0,
+                "nonce_strategy": "single_pending_nonce",
+                "deadline_seconds": 90,
+                "allow_backrun": False,
+            }
+        elif chain in {"bsc", "polygon"}:
+            mode = "split_order_and_low_slippage"
+            providers = ["private-rpc-if-available", "trusted-rpc"]
+            template = {
+                "send_mode": "small_slices",
+                "max_slippage_pct": min(0.8, max(0.2, slippage_pct)),
+                "split_interval_seconds": 12,
+                "deadline_seconds": 120,
+                "randomized_send_delay_ms": [100, 500],
+            }
+        elif chain == "solana":
+            mode = "bundle_preferred"
+            providers = ["jito-bundles", "priority-fee-rpc"]
+            template = {
+                "send_mode": "bundle_or_priority_fee",
+                "max_slippage_pct": min(1.0, max(0.2, slippage_pct)),
+                "priority_fee_lamports": 50_000 if urgency != "HIGH" else 120_000,
+                "preflight_commitment": "processed",
+            }
+        else:
+            providers = ["default-rpc"]
+            template = {
+                "send_mode": "public_with_strict_slippage",
+                "max_slippage_pct": min(0.8, max(0.2, slippage_pct)),
+                "deadline_seconds": 90,
+            }
+
+        return {
+            "chain": chain,
+            "mode": mode,
+            "urgency": urgency,
+            "providers": providers,
+            "gas_snapshot": gas,
+            "template": template,
+            "timestamp": _now(),
+        }
+
     def pre_trade_check(
         self,
         from_token: str,
@@ -293,6 +363,163 @@ class TradeGuard:
             "timestamp": _now(),
         }
 
+    def simulate_trade(
+        self,
+        from_token: str,
+        to_token: str,
+        amount: float,
+        chain: str = "ethereum",
+        wallet_address: Optional[str] = None,
+    ) -> Dict:
+        """预交易模拟：输出可执行/阻断以及执行模板。"""
+        amount = float(amount or 0)
+        if amount <= 0:
+            return {
+                "status": "BLOCKED",
+                "executable": False,
+                "reasons": ["交易数量必须大于 0"],
+                "timestamp": _now(),
+            }
+
+        check = self.pre_trade_check(
+            from_token=from_token,
+            to_token=to_token,
+            amount=amount,
+            chain=chain,
+            wallet_address=wallet_address,
+        )
+        quote = check["checks"]["quote"]
+        price = _safe_float(self.client.get_price(from_token, chain).get("price"), 0.0)
+        trade_usd = amount * price
+        slippage_pct = _safe_float(quote.get("slippage"), 1.0)
+        expected_out = _safe_float(quote.get("to_amount"), 0.0)
+        worst_out = max(0.0, expected_out * (1 - slippage_pct / 100))
+        private_template = self.build_private_tx_strategy(chain, trade_usd=trade_usd, slippage_pct=slippage_pct)
+
+        executable = check["decision"] != "BLOCK" and worst_out > 0
+        status = "EXECUTABLE" if executable and check["decision"] == "PASS" else "EXECUTABLE_WITH_WARNINGS" if executable else "BLOCKED"
+
+        reasons = []
+        if check["blockers"]:
+            reasons.extend(check["blockers"])
+        if check["warnings"] and status != "EXECUTABLE":
+            reasons.extend(check["warnings"][:3])
+        if not reasons:
+            reasons.append("风控通过，可执行")
+
+        return {
+            "status": status,
+            "executable": executable,
+            "from_token": from_token.upper(),
+            "to_token": to_token.upper(),
+            "amount": amount,
+            "chain": chain,
+            "expected_receive": round(expected_out, 8),
+            "worst_case_receive": round(worst_out, 8),
+            "trade_usd": round(trade_usd, 2),
+            "risk_score": check["risk_score"],
+            "reasons": reasons,
+            "tx_template": {
+                "max_slippage_pct": min(1.2, max(0.2, slippage_pct)),
+                "deadline_seconds": private_template["template"].get("deadline_seconds", 90),
+                "send_mode": private_template["template"].get("send_mode"),
+                "private_tx_mode": private_template["mode"],
+                "providers": private_template["providers"],
+            },
+            "check": check,
+            "timestamp": _now(),
+        }
+
+    def revoke_high_risk_approvals(
+        self,
+        wallet_address: str,
+        chain: str = "ethereum",
+        execute: bool = False,
+        max_items: int = 8,
+    ) -> Dict:
+        """高风险授权撤销流：支持 dry-run / execute。"""
+        if not wallet_address:
+            return {
+                "status": "error",
+                "message": "wallet_address 不能为空",
+                "timestamp": _now(),
+            }
+
+        candidates: List[Dict] = []
+        live = self.client.get_wallet_approval_risk(wallet_address, chain)
+        if live.get("available"):
+            for item in live.get("items", []):
+                if item.get("is_infinite") or item.get("is_risky"):
+                    spender = (item.get("spender") or "").strip()
+                    if spender and spender != "N/A":
+                        candidates.append(
+                            {
+                                "token": item.get("token") or "UNKNOWN",
+                                "spender": spender,
+                                "reason": "infinite_or_risky",
+                            }
+                        )
+
+        if not candidates:
+            fallback_approvals = self.approval_manager.get_approvals(wallet_address, chain)
+            for approval in fallback_approvals:
+                if approval.is_infinite or approval.amount > 1_000_000:
+                    candidates.append(
+                        {
+                            "token": approval.token,
+                            "spender": approval.spender,
+                            "reason": "fallback_high_risk",
+                        }
+                    )
+
+        # 去重
+        uniq = {}
+        for c in candidates:
+            key = (c["token"], c["spender"])
+            uniq[key] = c
+        selected = list(uniq.values())[:max_items]
+
+        gas = self.client.estimate_gas(chain)
+        est_fee_total = round(_safe_float(gas.get("estimated_fee"), 0.0) * len(selected), 6)
+
+        if not execute:
+            return {
+                "status": "dry_run",
+                "wallet_address": wallet_address,
+                "chain": chain,
+                "selected_count": len(selected),
+                "estimated_total_fee_usd": est_fee_total,
+                "candidates": selected,
+                "source": live.get("source") if live.get("available") else "fallback/local",
+                "next_action": "确认后传 execute=True 执行撤销",
+                "timestamp": _now(),
+            }
+
+        results = []
+        for item in selected:
+            revoke = self.approval_manager.revoke_approval(item["token"], item["spender"], chain)
+            results.append(
+                {
+                    "token": item["token"],
+                    "spender": item["spender"],
+                    "status": revoke["status"],
+                    "tx_hash": revoke.get("tx_hash"),
+                    "message": revoke.get("message"),
+                }
+            )
+
+        success_count = len([r for r in results if r["status"] == "success"])
+        return {
+            "status": "executed",
+            "wallet_address": wallet_address,
+            "chain": chain,
+            "attempted": len(selected),
+            "succeeded": success_count,
+            "estimated_total_fee_usd": est_fee_total,
+            "results": results,
+            "timestamp": _now(),
+        }
+
     def plan_order_slices(
         self,
         from_token: str,
@@ -404,3 +631,30 @@ def plan_order_slices(
 
 def route_insight(from_token: str, to_token: str, chain: str = "ethereum") -> Dict:
     return _guard.route_insight(from_token, to_token, chain)
+
+
+def build_private_tx_strategy(
+    chain: str = "ethereum",
+    trade_usd: float = 1000,
+    slippage_pct: float = 1.0,
+) -> Dict:
+    return _guard.build_private_tx_strategy(chain, trade_usd, slippage_pct)
+
+
+def simulate_trade(
+    from_token: str,
+    to_token: str,
+    amount: float,
+    chain: str = "ethereum",
+    wallet_address: Optional[str] = None,
+) -> Dict:
+    return _guard.simulate_trade(from_token, to_token, amount, chain, wallet_address)
+
+
+def revoke_high_risk_approvals(
+    wallet_address: str,
+    chain: str = "ethereum",
+    execute: bool = False,
+    max_items: int = 8,
+) -> Dict:
+    return _guard.revoke_high_risk_approvals(wallet_address, chain, execute, max_items)

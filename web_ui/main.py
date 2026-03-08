@@ -15,7 +15,14 @@ from okx_skills.onchainos_api import (
     OnchainOSClient, get_portfolio, get_price, search_token,
     get_swap_quote, execute_swap, get_smart_money_flows
 )
-from okx_skills.trade_guard import pre_trade_check, plan_order_slices, route_insight
+from okx_skills.trade_guard import (
+    pre_trade_check,
+    plan_order_slices,
+    route_insight,
+    build_private_tx_strategy,
+    simulate_trade,
+    revoke_high_risk_approvals,
+)
 
 app = Flask(__name__)
 client = OnchainOSClient()
@@ -184,6 +191,49 @@ HTML = """
                     </select>
                     <button onclick="runRouteInsight()">查询路由</button>
                     <div class="result" id="routeResult">查看可用池子、流动性和24h成交量</div>
+                </div>
+                <div class="card">
+                    <h3>🕶️ 私有交易模板</h3>
+                    <select id="privateChain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="bsc">BSC</option>
+                        <option value="base">Base</option>
+                        <option value="arbitrum">Arbitrum</option>
+                        <option value="solana">Solana</option>
+                    </select>
+                    <input type="number" id="privateTradeUsd" placeholder="交易额USD" value="5000">
+                    <input type="number" id="privateSlippage" placeholder="滑点%" value="0.8">
+                    <button onclick="runPrivateStrategy()">生成模板</button>
+                    <div class="result" id="privateResult">输出 anti-sandwich 参数模板</div>
+                </div>
+                <div class="card">
+                    <h3>🧪 交易模拟</h3>
+                    <input type="text" id="simFromToken" placeholder="输入代币 (ETH)" value="ETH">
+                    <input type="text" id="simToToken" placeholder="目标代币 (USDC)" value="USDC">
+                    <input type="number" id="simAmount" placeholder="数量" value="1">
+                    <select id="simChain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="bsc">BSC</option>
+                        <option value="base">Base</option>
+                    </select>
+                    <input type="text" id="simWallet" placeholder="钱包地址 (可选)">
+                    <button onclick="runSimulation()">运行模拟</button>
+                    <div class="result" id="simResult">输出可执行/阻断与执行模板</div>
+                </div>
+                <div class="card">
+                    <h3>🧹 授权撤销流</h3>
+                    <input type="text" id="revokeWallet" placeholder="钱包地址 (0x...)">
+                    <select id="revokeChain">
+                        <option value="ethereum">Ethereum</option>
+                        <option value="bsc">BSC</option>
+                        <option value="base">Base</option>
+                    </select>
+                    <select id="revokeMode">
+                        <option value="dry_run">Dry Run</option>
+                        <option value="execute">Execute</option>
+                    </select>
+                    <button onclick="runRevokeFlow()">运行撤销流</button>
+                    <div class="result" id="revokeResult">先预演高风险授权，再决定是否执行</div>
                 </div>
             </div>
         </div>
@@ -359,6 +409,51 @@ HTML = """
             });
             document.getElementById('routeResult').textContent = JSON.stringify(result, null, 2);
         }
+
+        async function runPrivateStrategy() {
+            const chain = document.getElementById('privateChain').value;
+            const tradeUsd = parseFloat(document.getElementById('privateTradeUsd').value);
+            const slippagePct = parseFloat(document.getElementById('privateSlippage').value);
+            document.getElementById('privateResult').textContent = '生成中...';
+            const result = await apiCall('/api/private-strategy', {
+                chain,
+                trade_usd: tradeUsd,
+                slippage_pct: slippagePct,
+            });
+            document.getElementById('privateResult').textContent = JSON.stringify(result, null, 2);
+        }
+
+        async function runSimulation() {
+            const fromToken = document.getElementById('simFromToken').value;
+            const toToken = document.getElementById('simToToken').value;
+            const amount = parseFloat(document.getElementById('simAmount').value);
+            const chain = document.getElementById('simChain').value;
+            const walletAddress = document.getElementById('simWallet').value;
+            if (!amount || amount <= 0) return alert('请输入大于0的数量');
+            document.getElementById('simResult').textContent = '模拟中...';
+            const result = await apiCall('/api/simulate', {
+                from_token: fromToken,
+                to_token: toToken,
+                amount,
+                chain,
+                wallet_address: walletAddress || null,
+            });
+            document.getElementById('simResult').textContent = JSON.stringify(result, null, 2);
+        }
+
+        async function runRevokeFlow() {
+            const walletAddress = document.getElementById('revokeWallet').value;
+            const chain = document.getElementById('revokeChain').value;
+            const mode = document.getElementById('revokeMode').value;
+            if (!walletAddress) return alert('请输入钱包地址');
+            document.getElementById('revokeResult').textContent = '执行中...';
+            const result = await apiCall('/api/revoke', {
+                wallet_address: walletAddress,
+                chain,
+                execute: mode === 'execute',
+            });
+            document.getElementById('revokeResult').textContent = JSON.stringify(result, null, 2);
+        }
         
         async function getSmartMoney() {
             const chain = document.getElementById('smartChain').value;
@@ -444,6 +539,39 @@ def route_quality():
         from_token=data.get('from_token', 'ETH'),
         to_token=data.get('to_token', 'USDC'),
         chain=data.get('chain', 'ethereum'),
+    )
+    return jsonify(result)
+
+@app.route('/api/private-strategy', methods=['POST'])
+def private_strategy():
+    data = request.json or {}
+    result = build_private_tx_strategy(
+        chain=data.get('chain', 'ethereum'),
+        trade_usd=float(data.get('trade_usd', 1000)),
+        slippage_pct=float(data.get('slippage_pct', 1.0)),
+    )
+    return jsonify(result)
+
+@app.route('/api/simulate', methods=['POST'])
+def simulate():
+    data = request.json or {}
+    result = simulate_trade(
+        from_token=data.get('from_token', 'ETH'),
+        to_token=data.get('to_token', 'USDC'),
+        amount=float(data.get('amount', 1)),
+        chain=data.get('chain', 'ethereum'),
+        wallet_address=data.get('wallet_address'),
+    )
+    return jsonify(result)
+
+@app.route('/api/revoke', methods=['POST'])
+def revoke():
+    data = request.json or {}
+    result = revoke_high_risk_approvals(
+        wallet_address=data.get('wallet_address', ''),
+        chain=data.get('chain', 'ethereum'),
+        execute=bool(data.get('execute', False)),
+        max_items=int(data.get('max_items', 8)),
     )
     return jsonify(result)
 

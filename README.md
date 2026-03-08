@@ -37,7 +37,7 @@ okx-onchain-assistant/
 | `audit.py` | 流动性检测、增发/黑名单扫描、蜜罐识别 |
 | `trading_bot.py` | 自动开仓/平仓、止盈止损、仓位管理 |
 | `onchainos_api.py` | 钱包余额、DEX 闪兑、跨链桥 |
-| `trade_guard.py` | 下单前体检（滑点/Gas/安全/授权/MEV）+ 大单拆单 + 路由质量 |
+| `trade_guard.py` | 下单前体检 + 拆单 + 路由质量 + 私有交易模板 + 交易模拟 + 授权撤销流 |
 
 ### 链上分析
 
@@ -194,6 +194,16 @@ route = route_insight("ETH", "USDC", "ethereum")
 print(route["quality"], route["message"])
 ```
 
+### 10. 私有交易模板 + 交易模拟 + 授权撤销流
+
+```python
+from okx_skills.trade_guard import build_private_tx_strategy, simulate_trade, revoke_high_risk_approvals
+
+private_tpl = build_private_tx_strategy("ethereum", trade_usd=5000, slippage_pct=0.8)
+sim = simulate_trade("ETH", "USDC", 1, "ethereum", "0x742d...")
+dry_run = revoke_high_risk_approvals("0x742d...", "ethereum", execute=False)
+```
+
 ---
 
 ## CLI 命令
@@ -222,6 +232,16 @@ python ai_assistant/main.py split ETH USDC 50 ethereum
 
 # 路由质量
 python ai_assistant/main.py route ETH USDC ethereum
+
+# 私有交易模板
+python ai_assistant/main.py private ethereum 5000 0.8
+
+# 交易模拟（可执行/阻断）
+python ai_assistant/main.py simulate ETH USDC 1 ethereum 0x...
+
+# 高风险授权撤销（先 dry-run，再 execute）
+python ai_assistant/main.py revoke 0x... ethereum
+python ai_assistant/main.py revoke 0x... ethereum execute
 ```
 
 ---
@@ -263,6 +283,11 @@ python-dotenv>=1.0.0
 - 交易风控切换为“真实数据优先”：DexScreener（价格/流动性/路由）、GoPlus（合约安全/授权风险）、链上 RPC（实时 Gas）
 - 体检新增 MEV/被夹风险评分（sandwich risk）
 - 新增路由质量功能（`route_insight` + CLI `route` + Web `/api/route`）
+
+### v3.3 (2026-03-08)
+- 新增私有交易防夹模板（按链输出 anti-sandwich 参数）
+- 新增交易模拟（`simulate_trade`）：输出可执行/阻断与 tx template
+- 新增高风险授权撤销流（`revoke_high_risk_approvals`）：支持 dry-run 与 execute
 
 ### v3.0 (2026-03-08)
 - AI 独有能力：24/7 监控、多链监控、情绪管理

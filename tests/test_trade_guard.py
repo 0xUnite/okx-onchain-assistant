@@ -1,6 +1,13 @@
 import unittest
 
-from okx_skills.trade_guard import plan_order_slices, pre_trade_check, route_insight
+from okx_skills.trade_guard import (
+    build_private_tx_strategy,
+    plan_order_slices,
+    pre_trade_check,
+    revoke_high_risk_approvals,
+    route_insight,
+    simulate_trade,
+)
 
 
 class TradeGuardTest(unittest.TestCase):
@@ -30,6 +37,23 @@ class TradeGuardTest(unittest.TestCase):
         result = route_insight("ETH", "USDC", "ethereum")
         self.assertIn("quality", result)
         self.assertIn("routes", result)
+
+    def test_private_strategy_shape(self):
+        result = build_private_tx_strategy("ethereum", 5000, 0.8)
+        self.assertIn("mode", result)
+        self.assertIn("template", result)
+        self.assertIn("providers", result)
+
+    def test_simulate_trade_shape(self):
+        result = simulate_trade("ETH", "USDC", 1, "ethereum", "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
+        self.assertIn("status", result)
+        self.assertIn("executable", result)
+        self.assertIn("tx_template", result)
+
+    def test_revoke_flow_dry_run(self):
+        result = revoke_high_risk_approvals("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", "ethereum", execute=False)
+        self.assertEqual(result["status"], "dry_run")
+        self.assertIn("candidates", result)
 
 
 if __name__ == "__main__":

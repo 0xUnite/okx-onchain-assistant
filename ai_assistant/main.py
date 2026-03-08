@@ -15,7 +15,14 @@ from okx_skills.onchainos_api import (
     get_swap_quote, execute_swap, get_smart_money_flows,
     OnchainOSClient
 )
-from okx_skills.trade_guard import pre_trade_check, plan_order_slices, route_insight
+from okx_skills.trade_guard import (
+    pre_trade_check,
+    plan_order_slices,
+    route_insight,
+    build_private_tx_strategy,
+    simulate_trade,
+    revoke_high_risk_approvals,
+)
 
 # 使用 OpenClaw 内置 AI（通过环境变量）
 OPENCLAW_API_URL = os.getenv("OPENCLAW_API_URL", "http://127.0.0.1:8080")
@@ -329,6 +336,101 @@ Gas 预估: ${result['checks']['gas']['estimated_fee']}
 Top Routes:
 {chr(10).join(top_lines)}
 """
+
+    # 私有交易模板
+    elif command.startswith("private "):
+        # private ethereum 5000 0.8
+        chain = parts[1] if len(parts) > 1 else "ethereum"
+        try:
+            trade_usd = float(parts[2]) if len(parts) > 2 else 1000
+            slippage = float(parts[3]) if len(parts) > 3 else 1.0
+        except ValueError:
+            return "参数格式错误，示例: private ethereum 5000 0.8"
+        result = build_private_tx_strategy(chain, trade_usd, slippage)
+        return f"""
+🕶️ 私有交易防夹模板 ({chain})
+
+模式: {result['mode']}
+紧急度: {result['urgency']}
+推荐通道: {', '.join(result['providers'])}
+Gas: {result['gas_snapshot']['gas_price']} {result['gas_snapshot']['unit']}
+
+模板:
+{result['template']}
+"""
+
+    # 交易模拟
+    elif command.startswith("simulate "):
+        # simulate ETH USDC 1 ethereum 0x...
+        if len(parts) < 4:
+            return "格式错误，示例: simulate ETH USDC 1 ethereum 0x..."
+        from_token = parts[1].upper()
+        to_token = parts[2].upper()
+        try:
+            amount = float(parts[3])
+        except ValueError:
+            return "数量格式错误，示例: simulate ETH USDC 1 ethereum"
+        chain = parts[4] if len(parts) > 4 else "ethereum"
+        wallet = parts[5] if len(parts) > 5 else None
+        result = simulate_trade(from_token, to_token, amount, chain, wallet)
+        return f"""
+🧪 交易模拟 ({from_token}->{to_token}, {chain})
+
+状态: {result['status']}
+可执行: {result['executable']}
+预期成交: {result.get('expected_receive')}
+最坏成交: {result.get('worst_case_receive')}
+风险分: {result.get('risk_score')}
+
+原因:
+{chr(10).join(['- ' + r for r in result.get('reasons', [])])}
+
+执行模板:
+{result.get('tx_template')}
+"""
+
+    # 授权撤销流
+    elif command.startswith("revoke "):
+        # revoke 0x... ethereum execute
+        if len(parts) < 2:
+            return "格式错误，示例: revoke 0x... ethereum execute"
+        wallet = parts[1]
+        chain = parts[2] if len(parts) > 2 else "ethereum"
+        execute = len(parts) > 3 and parts[3] in {"run", "execute", "yes", "true"}
+        result = revoke_high_risk_approvals(wallet, chain, execute=execute)
+
+        if result.get("status") == "dry_run":
+            rows = [
+                f"- {c['token']} -> {c['spender']} ({c['reason']})"
+                for c in result.get("candidates", [])
+            ]
+            return f"""
+🧹 授权撤销预演 ({chain})
+
+候选数量: {result['selected_count']}
+预计费用: ${result['estimated_total_fee_usd']}
+
+候选列表:
+{chr(10).join(rows) if rows else '- 无高风险授权'}
+
+执行方式:
+revoke {wallet} {chain} execute
+"""
+
+        rows = [
+            f"- {r['token']} -> {r['spender']} | {r['status']} | {r.get('tx_hash')}"
+            for r in result.get("results", [])
+        ]
+        return f"""
+🧹 授权撤销执行结果 ({chain})
+
+尝试: {result.get('attempted')}
+成功: {result.get('succeeded')}
+预计费用: ${result.get('estimated_total_fee_usd')}
+
+详情:
+{chr(10).join(rows) if rows else '- 无'}
+"""
     
     # 帮助
     elif command in ["help", "帮助", "?"]:
@@ -346,6 +448,9 @@ Top Routes:
 - precheck <从> <到> <数量> [链] [钱包地址] - 交易前体检
 - split <从> <到> <数量> [链] - 大单拆单计划
 - route <从> <到> [链] - 查看路由质量/池子深度
+- private <链> [交易额USD] [滑点%] - 私有交易防夹模板
+- simulate <从> <到> <数量> [链] [钱包地址] - 交易模拟（可执行/阻断）
+- revoke <钱包> [链] [execute] - 高风险授权撤销（默认dry-run）
 
 示例:
   price ETH
@@ -355,6 +460,10 @@ Top Routes:
   precheck ETH USDC 1 ethereum 0xabc...
   split ETH USDC 50 ethereum
   route ETH USDC ethereum
+  private ethereum 5000 0.8
+  simulate ETH USDC 1 ethereum 0xabc...
+  revoke 0xabc... ethereum
+  revoke 0xabc... ethereum execute
 """
     
     else:
