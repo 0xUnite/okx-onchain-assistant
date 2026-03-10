@@ -1,198 +1,172 @@
 # OKX OnchainOS AI Assistant
 
-> 🦞 参赛作品 | OKX OnchainOS AI 松
+> 🦞 参赛作品 | OKX OnchainOS AI 松  
+> 基于 OpenClaw + OKX OnchainOS Skills 打造的链上 AI 交易助手
 
-基于 OpenClaw + OKX OnchainOS Skills 开发的链上 AI 交易助手。
+---
+
+## 项目亮点
+
+这不是普通的链上看盘工具，而是一个 **会分析、会决策、会执行** 的 AI 交易助手。
+
+### 🤖 AI 网格策略
+AI 持续分析市场波动率、趋势强弱与流动性状态，**自动设置最优网格区间、层数、间距与仓位分配**，减少手动调参。
+
+### 📰 新闻情绪交易
+实时抓取新闻、社媒与热点事件，结合 AI 做情绪分析，识别利多/利空信号，**自动触发交易执行或风险减仓**。
+
+### 🐋 鲸鱼跟单
+追踪聪明钱地址、鲸鱼钱包与链上大额异动，识别高价值买卖动作，结合 OKX 交易能力实现 **一键跟单 / 快速复制策略**。
+
+### 📊 智能止盈止损
+AI 根据实时波动率、市场结构和持仓状态，**动态调整止盈止损位置**，避免固定参数在剧烈行情中失效。
 
 ---
 
 ## 技术架构
 
-```
+```text
 okx-onchain-assistant/
-├── okx_skills/              # 核心模块
-│   ├── onchainos_api.py     # OKX API 封装
+├── okx_skills/              # 核心策略与链上能力
+│   ├── onchainos_api.py     # OKX / OnchainOS API 封装
 │   ├── scanner.py           # 新币扫描 + AI 评分
-│   ├── audit.py            # 合约审计
-│   ├── analytics.py        # Holder/池子/热度分析
-│   ├── security.py         # 授权管理 + Gas 预警
-│   ├── monitor.py          # 套利扫描 + 闪电贷检测
-│   ├── trading_bot.py      # 自动交易机器人
-│   └── ai_brain.py        # AI 决策 + 回测
+│   ├── audit.py             # 合约审计
+│   ├── analytics.py         # Holder / 池子 / 热度分析
+│   ├── security.py          # 授权管理 + Gas 预警
+│   ├── monitor.py           # 链上监控 / 套利 / 异常检测
+│   ├── trading_bot.py       # 自动交易机器人
+│   └── ai_brain.py          # AI 决策中枢 / 回测 / 风控
 ├── web_ui/                  # Web 仪表盘
-├── ai_assistant/            # CLI 对话
-└── demo.py                  # 演示脚本
+│   └── main.py
+├── ai_assistant/            # CLI 对话助手
+│   └── main.py
+├── demo.py                  # 演示脚本
+├── CONTENT.md               # 参赛提交内容
+├── CONTENT_V2.md            # 备用内容版本
+└── requirements.txt         # 项目依赖
 ```
 
 ---
 
-## 核心功能
+## 核心能力地图
 
-### 交易核心
+### 1. AI 交易决策层
+- **AI 网格策略**：基于波动率、趋势、流动性自动生成网格参数
+- **智能止盈止损**：根据行情波动动态调整 TP / SL
+- **策略回测**：对 AI 决策进行历史回测与效果验证
+- **仓位管理**：结合风险评分控制开仓比例与暴露水平
 
-| 模块 | 功能 |
+### 2. 信息感知层
+- **新闻情绪交易**：抓取新闻、社媒、事件流并做情绪判断
+- **新币扫描**：监控多链新币，AI 评分筛选优质机会
+- **链上热点分析**：识别代币热度、池子变化和异常活跃地址
+- **鲸鱼跟单**：跟踪聪明钱地址和大额资金异动
+
+### 3. 执行与安全层
+- **自动交易执行**：支持开仓、平仓、止盈止损管理
+- **合约审计**：检测蜜罐、增发、黑名单、流动性风险
+- **授权管理**：发现高风险授权并支持一键撤销
+- **Gas / 风险监控**：优化交易时机，降低执行损耗
+
+---
+
+## 模块说明
+
+| 模块 | 作用 |
 |------|------|
-| `scanner.py` | 新币监控、AI 评分 (≥85 推送)、合约审计 |
-| `audit.py` | 流动性检测、增发/黑名单扫描、蜜罐识别 |
-| `trading_bot.py` | 自动开仓/平仓、止盈止损、仓位管理 |
-| `onchainos_api.py` | 钱包余额、DEX 闪兑、跨链桥 |
-
-### 链上分析
-
-| 模块 | 功能 |
-|------|------|
-| `analytics.py` | Holder 分布、池子深度、代币热度、地址追踪 |
-| `monitor.py` | 套利扫描、新池子监控、闪电贷检测 |
-| `security.py` | Token 授权管理、一键撤销、钱包监控 |
-
-### AI 增强
-
-| 模块 | 功能 |
-|------|------|
-| `ai_brain.py` | AI 交易决策、情绪管理、策略回测 |
-| | 多链监控 (20+ 链)、异常模式识别 |
-| | 社交监听 (Twitter/TG/Discord) |
+| `ai_brain.py` | AI 决策中枢，负责策略生成、情绪分析、回测、动态风控 |
+| `trading_bot.py` | 自动执行交易、管理仓位、联动止盈止损 |
+| `monitor.py` | 链上异常监控、套利发现、资金异动识别 |
+| `analytics.py` | Holder 结构、池子深度、热度与地址行为分析 |
+| `scanner.py` | 新币扫描、项目评分、机会发现 |
+| `audit.py` | 合约安全检查，防 Rug / 蜜罐 / 黑名单 |
+| `security.py` | 授权管理、钱包风险监控、Gas 预警 |
+| `onchainos_api.py` | 对接 OKX OnchainOS / 交易与链上能力 |
 
 ---
 
 ## 快速开始
 
 ```bash
-# 克隆
 git clone https://github.com/0xUnite/okx-onchain-assistant.git
 cd okx-onchain-assistant
-
-# 安装
 pip install -r requirements.txt
 
 # 运行演示
 python demo.py
 
-# 查看提示词
-python demo.py prompts
-
-# 启动 Web
+# 启动 Web UI
 python web_ui/main.py
 
-# CLI 助手
+# 启动 CLI 助手
 python ai_assistant/main.py
 ```
 
 ---
 
-## 模块详解
+## 场景示例
 
-### 1. 新币扫描 + AI 评分
-
+### AI 网格策略
 ```python
-from okx_skills.scanner import NewTokenScanner
+from okx_skills.ai_brain import backtest_strategy
 
-scanner = NewTokenScanner()
-tokens = scanner.scan_chain("ethereum")
-
-for token in tokens:
-    analysis = scanner.analyze_token(token)
-    print(f"Score: {analysis['score']} - {analysis['recommendation']}")
+result = backtest_strategy("AI_GRID", "ETH", 30)
+print(result)
 ```
 
-### 2. 合约审计
-
+### 新闻情绪交易
 ```python
-from okx_skills.audit import audit_contract
+from okx_skills.ai_brain import ai_decide
 
-result = audit_contract("0x742d...", "ethereum")
-print(f"安全分数: {result['score']}/100")
-print(f"建议: {result['recommendation']}")
+signal = {
+    "token": "BTC",
+    "news_sentiment": "bullish",
+    "volatility": "high",
+    "event": "ETF inflow"
+}
+market = {
+    "trend": "up",
+    "rsi": 62,
+    "liquidity": "good"
+}
+
+print(ai_decide(signal=signal, market=market))
 ```
 
-### 3. 交易机器人
-
-```python
-from okx_skills.trading_bot import open_position, close_position, get_positions
-
-# 开仓
-result = open_position(
-    token="WETH",
-    chain="ethereum",
-    side="LONG",
-    entry_price=3000,
-    quantity=0.1,
-    stop_loss=2850,
-    take_profit=3300
-)
-
-# 平仓
-close_position("1", 3150, "TP")
-
-# 查看仓位
-positions = get_positions("OPEN")
-```
-
-### 4. Holder 分析
-
+### 鲸鱼跟单
 ```python
 from okx_skills.analytics import analyze_holders
 
 result = analyze_holders("PEPE", "ethereum")
-print(f"Top10 集中度: {result['top10_concentration']}%")
-print(f"风险等级: {result['risk_level']}")
+print(result)
 ```
 
-### 5. 授权管理
-
+### 智能止盈止损
 ```python
-from okx_skills.security import check_approvals
+from okx_skills.trading_bot import open_position
 
-result = check_approvals("0x742d...", "ethereum")
-print(f"风险分数: {result['risk']['risk_points']}")
-print(f"风险等级: {result['risk']['risk_level']}")
-```
-
-### 6. AI 决策
-
-```python
-from okx_skills.ai_brain import ai_decide
-
-decision = ai_decide(
-    signal={"token": "ETH"},
-    market={"rsi": 85, "sentiment": "extreme_greed", "trend": "up"}
+result = open_position(
+    token="ETH",
+    chain="ethereum",
+    side="LONG",
+    entry_price=3000,
+    quantity=0.1,
+    stop_loss=2880,
+    take_profit=3300
 )
-print(f"决策: {decision['decision']}")
-print(f"信心度: {decision['confidence']}%")
-```
-
-### 7. 策略回测
-
-```python
-from okx_skills.ai_brain import backtest_strategy
-
-result = backtest_strategy("趋势跟踪", "ETH", 30)
-print(f"胜率: {result['win_rate']}%")
-print(f"总盈亏: {result['total_pnl_pct']}%")
+print(result)
 ```
 
 ---
 
-## CLI 命令
+## CLI 示例
 
 ```bash
-# 查余额
-python ai_assistant/main.py portfolio 0x...
-
-# 查价格
-python ai_assistant/main.py price ETH
-
-# 搜代币
-python ai_assistant/main.py search PEPE
-
-# 审计合约
-python ai_assistant/main.py audit 0x...
-
-# 新币扫描
 python ai_assistant/main.py scan
-
-# 开仓
+python ai_assistant/main.py search PEPE
+python ai_assistant/main.py audit 0x742d...
 python ai_assistant/main.py buy ETH 0.1
+python ai_assistant/main.py portfolio 0x...
 ```
 
 ---
@@ -200,30 +174,20 @@ python ai_assistant/main.py buy ETH 0.1
 ## 环境变量
 
 ```bash
-# OKX API (可选，使用内置测试密钥)
 export OKX_API_KEY="your-key"
 export OKX_SECRET_KEY="your-secret"
 export OKX_PASSPHRASE="your-passphrase"
-
-# Flask
 export FLASK_ENV=development
 ```
 
 ---
 
-## 依赖
-
-```
-requests>=2.28.0
-flask>=2.3.0
-flask-cors>=4.0.0
-jinja2>=3.1.0
-python-dotenv>=1.0.0
-```
-
----
-
 ## Changelog
+
+### v3.1 (2026-03-10)
+- 突出 AI 网格策略、新闻情绪交易、鲸鱼跟单、智能止盈止损
+- 重构 README 结构，强化产品卖点表达
+- 更新参赛内容文档
 
 ### v3.0 (2026-03-08)
 - AI 独有能力：24/7 监控、多链监控、情绪管理
