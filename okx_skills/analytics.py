@@ -55,7 +55,7 @@ class OnchainAnalytics:
             "chain": chain,
             "total_holders": len(holders),
             "top10_concentration": round(top10_pct, 2),
-            "whale_count": len([h for h in holders if h.whale]),
+            "whale_count": len([h for h in holders if h.is_whale]),
             "contract_count": len([h for h in holders if h.is_contract]),
             "distribution": {
                 "top10": round(top10_pct, 2),
@@ -67,7 +67,7 @@ class OnchainAnalytics:
                     "address": h.address[:10] + "...",
                     "balance": round(h.balance, 4),
                     "percent": round(h.percent, 2),
-                    "is_whale": h.whale
+                    "is_whale": h.is_whale
                 }
                 for h in sorted(holders, key=lambda x: x.balance, reverse=True)[:5]
             ],
@@ -175,7 +175,7 @@ class OnchainAnalytics:
             "total_txs": len(txs),
             "total_inflow": sum(t["amount"] for t in txs if t["type"] == "IN"),
             "total_outflow": sum(t["amount"] for t in txs if t["type"] == "OUT"),
-            "favorite_dex": max(set(t["dex"] for t in txs), key=lambda x: t["dex"]),
+            "favorite_dex": max((t["dex"] for t in txs), key=lambda dex: sum(1 for tx in txs if tx["dex"] == dex)),
             "recent_transactions": txs[:5],
             "timestamp": datetime.now().isoformat()
         }

@@ -169,20 +169,20 @@ class TradingBot:
     def get_pnl_summary(self) -> Dict:
         """盈亏汇总"""
         closed = [p for p in self.positions if p.status == "CLOSED"]
-        
+
         total_pnl = sum(p.pnl for p in closed)
         wins = len([p for p in closed if p.pnl > 0])
         losses = len([p for p in closed if p.pnl <= 0])
         total = wins + losses
         win_rate = (wins / total * 100) if total > 0 else 0
-        
+
         return {
             "total_trades": total,
             "wins": wins,
             "losses": losses,
-nl": round(total_pnl, 2),
-            "": losses,
-                       "total_pavg_pnl": round(total_pnl / total, 2) if total > 0 else 0,
+            "win_rate": round(win_rate, 2),
+            "total_pnl": round(total_pnl, 2),
+            "avg_pnl": round(total_pnl / total, 2) if total > 0 else 0,
             "timestamp": datetime.now().isoformat()
         }
     

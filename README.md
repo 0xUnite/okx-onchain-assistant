@@ -1,211 +1,313 @@
-# OKX OnchainOS AI Assistant
+# OKX Onchain Assistant
 
-> 🦞 参赛作品 | OKX OnchainOS AI 松  
-> 基于 OpenClaw + OKX OnchainOS Skills 打造的链上 AI 交易助手
+> 参赛作品升级版：把 **OKX OnchainOS 能力 + AI 分析 + 链上执行思路** 打造成一套更像产品、而不是脚本拼盘的 Onchain Copilot。
 
----
+如果要一句话形容它：
 
-## 项目亮点
-
-这不是普通的链上看盘工具，而是一个 **会分析、会决策、会执行** 的 AI 交易助手。
-
-### 🤖 AI 网格策略
-AI 持续分析市场波动率、趋势强弱与流动性状态，**自动设置最优网格区间、层数、间距与仓位分配**，减少手动调参。
-
-### 📰 新闻情绪交易
-实时抓取新闻、社媒与热点事件，结合 AI 做情绪分析，识别利多/利空信号，**自动触发交易执行或风险减仓**。
-
-### 🐋 鲸鱼跟单
-追踪聪明钱地址、鲸鱼钱包与链上大额异动，识别高价值买卖动作，结合 OKX 交易能力实现 **一键跟单 / 快速复制策略**。
-
-### 📊 智能止盈止损
-AI 根据实时波动率、市场结构和持仓状态，**动态调整止盈止损位置**，避免固定参数在剧烈行情中失效。
+**它不是只会查数据的机器人，而是一套面向链上交易者的 Skills + Workflows 系统。**
 
 ---
 
-## 技术架构
+## 为什么这个版本更能打
+
+这次重构，核心不是多加几个功能，而是把已有能力整理成更清晰的产品结构：
+
+- **7 个独立 Skills**：像 Binance 官方 Skills 一样，职责明确
+- **4 个工作流**：Daily Briefing / Deep Dive / On-Chain Intel / Meme Hunter
+- **统一专业报告格式**：输出不再像调试日志，更像投研简报
+- **更实用的预设 Prompts**：适合 Demo、研究、交易决策
+- **环境变量管理 API Key**：避免把比赛项目做成泄密现场
+
+一句话：**更像产品，更适合比赛展示，也更方便后续扩展。**
+
+---
+
+## 亮点能力
+
+### 1. Market Rank：先找到值得看的，再决定值不值得买
+- 多链扫描新币
+- 条件筛选（流动性 / 市值 / 年龄）
+- AI Score 排序
+- 快速形成候选池与观察名单
+
+### 2. Token Info：给单个项目建立结构化画像
+- 实时价格
+- 市值 / Holder / 流动性
+- Pool / Heat / 基础面信息
+- 适合单币研究和 Demo 展示
+
+### 3. Token Audit：先防死，再谈收益
+- 快速审计 owner / mint / blacklist / honeypot 风险
+- 输出安全评分与参与建议
+- 用统一报告格式展示高风险点
+
+### 4. Trading Signal：把行情、资金流、执行成本拼到一起
+- 市场简报
+- Smart Money 流向
+- 交易计划生成
+- 更适合 AI 做“先结论、后理由”的输出
+
+### 5. Spot Execution：把分析变成可执行动作
+- 开仓 / 平仓
+- 止盈止损
+- 仓位计算
+- 交易复盘与 PnL 汇总
+
+### 6. Address Info：围绕地址建立链上画像
+- 地址近期行为
+- 常用 DEX
+- 成交量和活动频次
+- 授权风险与钱包监控
+
+### 7. Meme Hunter：专门针对高波动机会的捕捉模式
+- 新币扫描
+- AI Score 排序
+- Smart Money 信号辅助
+- 审计过滤垃圾项目
+
+---
+
+## 项目结构
 
 ```text
 okx-onchain-assistant/
-├── okx_skills/              # 核心策略与链上能力
-│   ├── onchainos_api.py     # OKX / OnchainOS API 封装
-│   ├── scanner.py           # 新币扫描 + AI 评分
-│   ├── audit.py             # 合约审计
-│   ├── analytics.py         # Holder / 池子 / 热度分析
-│   ├── security.py          # 授权管理 + Gas 预警
-│   ├── monitor.py           # 链上监控 / 套利 / 异常检测
-│   ├── trading_bot.py       # 自动交易机器人
-│   └── ai_brain.py          # AI 决策中枢 / 回测 / 风控
-├── web_ui/                  # Web 仪表盘
-│   └── main.py
-├── ai_assistant/            # CLI 对话助手
-│   └── main.py
-├── demo.py                  # 演示脚本
-├── CONTENT.md               # 参赛提交内容
-├── CONTENT_V2.md            # 备用内容版本
-└── requirements.txt         # 项目依赖
+├── ai_assistant/              # CLI 助手入口
+├── api_server/                # API 服务（可扩展）
+├── docs/
+│   └── SKILLS.md              # 7 个技能模块设计说明
+├── examples/
+│   └── workflows.md           # 4 个工作流示例
+├── okx_skills/
+│   ├── onchainos_api.py       # OKX / Web3 API 封装
+│   ├── scan_chain.py          # 多链新币扫描 / Meme Hunter 基础
+│   ├── scanner.py             # 扫描器原型
+│   ├── audit.py               # 合约快速审计
+│   ├── analytics.py           # Holder / Pool / 地址分析
+│   ├── security.py            # 授权管理 / 钱包监控 / Gas 预警
+│   ├── trading_bot.py         # 仓位与交易执行模拟
+│   ├── reporting.py           # 统一专业报告输出
+│   └── ai_brain.py            # AI 决策中枢（现有能力）
+├── prompts/
+│   └── presets.md             # 预设 Prompt 模板
+├── screenshots/
+├── demo.py                    # 一键演示 Skills + Workflows
+├── CONTENT.md
+├── CONTENT_V2.md
+├── .env.example
+└── README.md
 ```
 
 ---
 
-## 核心能力地图
+## Skills 视图（参考 Binance 思路）
 
-### 1. AI 交易决策层
-- **AI 网格策略**：基于波动率、趋势、流动性自动生成网格参数
-- **智能止盈止损**：根据行情波动动态调整 TP / SL
-- **策略回测**：对 AI 决策进行历史回测与效果验证
-- **仓位管理**：结合风险评分控制开仓比例与暴露水平
+详细说明见 [`docs/SKILLS.md`](docs/SKILLS.md)。
 
-### 2. 信息感知层
-- **新闻情绪交易**：抓取新闻、社媒、事件流并做情绪判断
-- **新币扫描**：监控多链新币，AI 评分筛选优质机会
-- **链上热点分析**：识别代币热度、池子变化和异常活跃地址
-- **鲸鱼跟单**：跟踪聪明钱地址和大额资金异动
-
-### 3. 执行与安全层
-- **自动交易执行**：支持开仓、平仓、止盈止损管理
-- **合约审计**：检测蜜罐、增发、黑名单、流动性风险
-- **授权管理**：发现高风险授权并支持一键撤销
-- **Gas / 风险监控**：优化交易时机，降低执行损耗
+| Skill | 核心能力 | 适用场景 |
+|------|------|------|
+| Market Rank | 新币扫描、条件筛选、排名 | 今天先看谁 |
+| Token Info | 价格、市值、Holder、池子 | 研究单个 token |
+| Token Audit | 蜜罐 / 权限 / 风险筛查 | 下单前排雷 |
+| Trading Signal | 市场简报、交易计划、资金流 | 给交易提供信号 |
+| Spot Execution | 开仓 / 平仓 / 仓位 / PnL | 把分析变成动作 |
+| Address Info | 地址行为、钱包监控、授权风险 | 做链上情报 |
+| Meme Hunter | meme 机会发现 + 风险过滤 | 找高弹性标的 |
 
 ---
 
-## 模块说明
+## 4 个工作流
 
-| 模块 | 作用 |
-|------|------|
-| `ai_brain.py` | AI 决策中枢，负责策略生成、情绪分析、回测、动态风控 |
-| `trading_bot.py` | 自动执行交易、管理仓位、联动止盈止损 |
-| `monitor.py` | 链上异常监控、套利发现、资金异动识别 |
-| `analytics.py` | Holder 结构、池子深度、热度与地址行为分析 |
-| `scanner.py` | 新币扫描、项目评分、机会发现 |
-| `audit.py` | 合约安全检查，防 Rug / 蜜罐 / 黑名单 |
-| `security.py` | 授权管理、钱包风险监控、Gas 预警 |
-| `onchainos_api.py` | 对接 OKX OnchainOS / 交易与链上能力 |
+详细示例见 [`examples/workflows.md`](examples/workflows.md)。
+
+### 1) Daily Briefing
+适合每天开盘前快速扫一遍市场：
+- 看重点币
+- 看 Smart Money
+- 看新币机会池
+- 看 Gas 环境
+- 输出今日 watchlist
+
+### 2) Deep Dive
+适合研究单个 token：
+- Token Info
+- Audit
+- Holder / Pool / 资金流
+- 结构化结论
+
+### 3) On-Chain Intel
+适合研究地址和行为：
+- 地址活动
+- 常用 DEX
+- 授权风险
+- 是否像聪明钱
+
+### 4) Meme Hunter
+适合快速抓热点：
+- 扫描新币
+- AI Score 排序
+- 过滤高风险项目
+- 形成 Top Picks / Watchlist / Avoid List
+
+---
+
+## 专业报告输出
+
+新增 `okx_skills/reporting.py`，统一输出：
+
+- 市场简报（Market Brief）
+- 新币分析（Token Scan）
+- 合约审计（Audit Report）
+- 地址画像（Address Report）
+- 交易计划（Trade Plan）
+
+这很重要，因为评委和用户看到的不是你内部怎么写代码，而是你**最后怎么呈现判断**。
 
 ---
 
 ## 快速开始
 
+### 1. 安装依赖
+
 ```bash
 git clone https://github.com/0xUnite/okx-onchain-assistant.git
 cd okx-onchain-assistant
 pip install -r requirements.txt
+```
 
-# 运行演示
+### 2. 配置环境变量
+
+本项目 **不应硬编码 API Key**。请使用环境变量或 `.env` 文件。
+
+```bash
+cp .env.example .env
+```
+
+填写：
+
+```bash
+OKX_API_KEY=your_api_key_here
+OKX_SECRET_KEY=your_secret_key_here
+OKX_PASSPHRASE=your_passphrase_here
+OPENCLAW_API_URL=http://127.0.0.1:8080
+```
+
+> `.gitignore` 已忽略 `.env`，别把密钥提交上去。比赛想赢，不需要靠自爆。
+
+### 3. 运行演示
+
+```bash
 python demo.py
-
-# 启动 Web UI
-python web_ui/main.py
-
-# 启动 CLI 助手
-python ai_assistant/main.py
 ```
 
----
-
-## 场景示例
-
-### AI 网格策略
-```python
-from okx_skills.ai_brain import backtest_strategy
-
-result = backtest_strategy("AI_GRID", "ETH", 30)
-print(result)
-```
-
-### 新闻情绪交易
-```python
-from okx_skills.ai_brain import ai_decide
-
-signal = {
-    "token": "BTC",
-    "news_sentiment": "bullish",
-    "volatility": "high",
-    "event": "ETF inflow"
-}
-market = {
-    "trend": "up",
-    "rsi": 62,
-    "liquidity": "good"
-}
-
-print(ai_decide(signal=signal, market=market))
-```
-
-### 鲸鱼跟单
-```python
-from okx_skills.analytics import analyze_holders
-
-result = analyze_holders("PEPE", "ethereum")
-print(result)
-```
-
-### 智能止盈止损
-```python
-from okx_skills.trading_bot import open_position
-
-result = open_position(
-    token="ETH",
-    chain="ethereum",
-    side="LONG",
-    entry_price=3000,
-    quantity=0.1,
-    stop_loss=2880,
-    take_profit=3300
-)
-print(result)
-```
-
----
-
-## CLI 示例
+### 4. 查看预设 Prompt
 
 ```bash
-python ai_assistant/main.py scan
-python ai_assistant/main.py search PEPE
-python ai_assistant/main.py audit 0x742d...
-python ai_assistant/main.py buy ETH 0.1
-python ai_assistant/main.py portfolio 0x...
+cat prompts/presets.md
 ```
 
----
-
-## 环境变量
+### 5. 启动 CLI 助手
 
 ```bash
-export OKX_API_KEY="your-key"
-export OKX_SECRET_KEY="your-secret"
-export OKX_PASSPHRASE="your-passphrase"
-export FLASK_ENV=development
+python ai_assistant/main.py help
+python ai_assistant/main.py market PEPE ethereum
+python ai_assistant/main.py plan WETH BUY 1000 ethereum
+python ai_assistant/main.py deep WIF solana
 ```
 
 ---
 
-## Changelog
+## 示例：输出会长什么样
 
-### v3.1 (2026-03-10)
-- 突出 AI 网格策略、新闻情绪交易、鲸鱼跟单、智能止盈止损
-- 重构 README 结构，强化产品卖点表达
-- 更新参赛内容文档
+### 市场简报
+```python
+from okx_skills.onchainos_api import OnchainOSClient
+from okx_skills.reporting import ReportFormatter
 
-### v3.0 (2026-03-08)
-- AI 独有能力：24/7 监控、多链监控、情绪管理
-- 策略回测、异常检测、社交监听
+client = OnchainOSClient()
+price = client.get_price("PEPE", "ethereum")
+token = client.search_token("PEPE", "ethereum")
+flows = client.get_smart_money_flows("ethereum", "PEPE")
 
-### v2.2 (2026-03-08)
-- 授权管理、Gas 预警、钱包监控
-- 套利扫描、新池子监控、闪电贷检测
+print(ReportFormatter.format_market_brief("PEPE", "ethereum", price, token, flows))
+```
 
-### v2.1 (2026-03-08)
-- Holder 分析、池子分析、代币热度
-- 交易机器人、跨链桥
+### 新币深度分析
+```python
+from okx_skills.scan_chain import analyze_token
+from okx_skills.reporting import ReportFormatter
 
-### v1.0 (2026-03-07)
-- 初始版本
+result = analyze_token(symbol="WIF", chain="solana")
+print(ReportFormatter.format_token_scan(result))
+```
+
+### 审计报告
+```python
+from okx_skills.audit import ContractAuditor
+from okx_skills.reporting import ReportFormatter
+
+result = ContractAuditor().quick_check("0x742d35Cc6634C0532925a3b844Bc9e7595f", "ethereum")
+print(ReportFormatter.format_audit_report(result))
+```
+
+---
+
+## 预设 Prompts
+
+见 [`prompts/presets.md`](prompts/presets.md)。
+
+推荐直接拿去做 Demo 的有：
+- Daily Briefing
+- Deep Dive
+- Meme Hunter
+- Address Intel
+- Trade Plan
+- PM / Demo 模式
+
+这些 Prompt 的目标只有一个：
+
+**让 AI 输出像研究员，不像终端报错信息。**
+
+---
+
+## Demo 建议打法
+
+如果你只有 3~5 分钟向评委展示，最建议的顺序是：
+
+1. **Daily Briefing** —— 先展示产品感
+2. **Deep Dive** —— 再展示分析深度
+3. **Meme Hunter** —— 最后展示链上速度感和机会发现能力
+
+这套顺序非常稳：
+- 有结构
+- 有数据
+- 有 AI
+- 有执行想象空间
+
+---
+
+## 安全说明
+
+- API Key 仅通过环境变量读取
+- `.env` 已加入 `.gitignore`
+- 代码中默认避免硬编码敏感信息
+- 交易与执行功能当前以演示 / 模拟为主，接真实执行前应补充签名、安全校验与权限控制
+
+---
+
+## 当前版本升级点
+
+### v4.0
+- 按 Binance Skills 思路重构为 **7 Skills + 4 Workflows**
+- 新增 `docs/SKILLS.md`
+- 新增 `examples/workflows.md`
+- 新增 `prompts/presets.md`
+- 新增 `okx_skills/reporting.py` 统一专业报告格式
+- 升级 `demo.py`，更适合比赛演示
+- 优化 CLI 输出，支持 `market` / `plan` / `deep`
+- 强化环境变量与安全说明
 
 ---
 
 ## GitHub
 
-https://github.com/0xUnite/okx-onchain-assistant
+<https://github.com/0xUnite/okx-onchain-assistant>

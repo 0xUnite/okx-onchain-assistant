@@ -10,6 +10,10 @@ from okx_skills.onchainos_api import (
     get_swap_quote, execute_swap, get_smart_money_flows,
     OnchainOSClient
 )
+from okx_skills.scan_chain import (
+    scan_new_tokens, scan_with_conditions, analyze_token, find_smart_money
+)
+from okx_skills.reporting import ReportFormatter
 
 # 使用 OpenClaw 内置 AI（通过环境变量）
 OPENCLAW_API_URL = os.getenv("OPENCLAW_API_URL", "http://127.0.0.1:8080")
@@ -42,58 +46,21 @@ def ask_ai(prompt: str, system_prompt: str = None) -> str:
         return f"Error: {str(e)}"
 
 def analyze_market(token: str, chain: str = "ethereum") -> str:
-    """AI 市场分析"""
-    # 获取数据
+    """结构化市场分析"""
     client = OnchainOSClient()
     price_data = client.get_price(token, chain)
     token_data = client.search_token(token, chain)
     flows = client.get_smart_money_flows(chain, token)
-    
-    # 构建分析提示
-    prompt = f"""分析 {token} ({chain}) 市场状况：
-
-价格: ${price_data['price']:.6f}
-24h涨跌: {price_data['change_24h']:+.2f}%
-市值: ${token_data.get('market_cap', 0):,}
-Holder数: {token_data.get('holders', 0):,}
-
-Smart Money 流向:
-- 流入: {flows.get('total_inflow', 0)} ETH
-- 流出: {flows.get('total_outflow', 0)} ETH
-
-请给出：
-1. 短期趋势判断
-2. 关键支撑/阻力位
-3. 风险提示
-4. 操作建议
-
-保持简洁，2-3句话。"""
-    
-    return ask_ai(prompt)
+    return ReportFormatter.format_market_brief(token, chain, price_data, token_data, flows)
 
 def generate_trade_plan(token: str, side: str, amount: float, chain: str = "ethereum") -> str:
-    """生成交易计划"""
+    """生成结构化交易计划"""
     client = OnchainOSClient()
+    normalized_side = side.upper()
+    quote = client.get_swap_quote("USDC", token, amount, chain) if normalized_side == "BUY" else client.get_swap_quote(token, "USDC", amount, chain)
     price_data = client.get_price(token, chain)
-    quote = client.get_swap_quote("USDC", token, amount, chain) if side == "BUY" else client.get_swap_quote(token, "USDC", amount, chain)
     gas = client.estimate_gas(chain)
-    
-    prompt = f"""生成 {side} {amount} {token} 交易计划：
-
-当前价格: ${price_data['price']:.6f}
-预期成交: {quote['to_amount']:.6f} {token}
-价格冲击: {quote['price_impact']:.2f}%
-Gas费用: ${gas['estimated_fee']:.4f}
-滑点建议: {quote['slippage']}%
-
-请给出：
-1. 入场策略
-2. 止盈止损建议
-3. 风控要点
-
-简洁明了。"""
-    
-    return ask_ai(prompt)
+    return ReportFormatter.format_trade_plan(token, normalized_side, chain, price_data, quote, gas)
 
 def handle_command(command: str) -> str:
     """处理用户命令"""
@@ -190,32 +157,174 @@ Gas费用: ${quote['gas_fee']:.4f}
 """
     
     # 市场分析
-    elif command.startswith("analyze ") or command.startswith("分析 "):
+    elif command.startswith("market ") or command.startswith("市场 ") or command.startswith("analyze "):
         parts = command.split()
         token = parts[1].upper() if len(parts) > 1 else "ETH"
         chain = parts[-1] if len(parts) > 2 else "ethereum"
-        
         return analyze_market(token, chain)
+
+    # 交易计划
+    elif command.startswith("plan ") or command.startswith("计划 "):
+        parts = command.split()
+        if len(parts) < 4:
+            return "用法: plan <代币> <BUY/SELL> <金额> [链]"
+        token = parts[1].upper()
+        side = parts[2].upper()
+        amount = float(parts[3])
+        chain = parts[4].lower() if len(parts) > 4 else "ethereum"
+        return generate_trade_plan(token, side, amount, chain)
+    
+    # ===== 扫链功能 =====
+    # 扫描新币: scan [链] [数量]
+    elif command.startswith("scan ") or command.startswith("扫 "):
+        parts = command.split()
+        
+        # 解析参数
+        chains = ["solana"]
+        limit = 10
+        
+        for i, part in enumerate(parts[1:]):
+            if part.isdigit():
+                limit = int(part)
+            elif part.lower() in ["solana", "ethereum", "bsc", "base"]:
+                chains = [part.lower()]
+        
+        result = scan_new_tokens(chains=chains, limit=limit)
+        
+        output = [f"🔍 扫链结果 ({', '.join(chains).upper()})", ""]
+        
+        for chain, tokens in result.items():
+            output.append(f"📌 {chain.upper()}")
+            for t in tokens[:8]:
+                emoji = "🟢" if t["price_change_24h"] > 0 else "🔴"
+                output.append(
+                    f"  {emoji} {t['symbol']:10} ${t['price']:.6f} "
+                    f"{t['price_change_24h']:+6.1f}% | LC: ${t['liquidity']:>8,.0f}"
+                )
+            output.append("")
+        
+        return "\n".join(output)
+    
+    # 条件扫描: filter [最小流动性] [链]
+    elif command.startswith("filter ") or command.startswith("条件 "):
+        parts = command.split()
+        
+        min_liq = 1000
+        chains = ["solana", "ethereum", "bsc"]
+        
+        for part in parts[1:]:
+            if part.isdigit():
+                min_liq = int(part)
+            elif part.lower() in ["solana", "ethereum", "bsc", "base"]:
+                chains = [part.lower()]
+        
+        result = scan_with_conditions(min_liquidity=min_liq, chains=chains)
+        
+        output = [f"🔍 条件扫描 (流动性>${min_liq:,})", ""]
+        for t in result[:10]:
+            score = t["score"]
+            emoji = "🔥" if score >= 80 else "⚠️" if score >= 70 else "💤"
+            output.append(
+                f"  {emoji} {t['symbol']:10} Score: {score:3} | "
+                f"MC: ${t['market_cap']:>10,.0f}"
+            )
+        
+        return "\n".join(output)
+    
+    # 代币分析: deep [代币符号] [链]
+    elif command.startswith("deep ") or command.startswith("深度 "):
+        parts = command.split()
+        
+        symbol = parts[1].upper() if len(parts) > 1 else None
+        chain = parts[-1].lower() if len(parts) > 2 and parts[-1].lower() in ["solana", "ethereum", "bsc"] else "solana"
+        
+        if not symbol:
+            return "请指定代币符号，如: deep PEPE"
+        
+        result = analyze_token(symbol=symbol, chain=chain)
+        
+        if "error" in result:
+            return f"错误: {result['error']}"
+        
+        t = result["token"]
+        output = [
+            f"📊 代币分析: {t['symbol']} ({t['name']})",
+            f"Chain: {t['chain']} | DEX: {t['dex']}",
+            "",
+            f"💰 价格: ${t['price']:.8f}",
+            f"📈 24h: {t['price_change_24h']:+.1f}%",
+            f"💧 流动性: ${t['liquidity']:,.0f}",
+            f"📊 市值: ${t['market_cap']:,.0f}",
+            f"⏰ 生命周期: {t['lifecycle']}",
+            "",
+            f"🎯 AI评分: {result['score']}/100",
+            f"💡 建议: {result['recommendation']}",
+        ]
+        
+        if result["signals"]:
+            output.append("")
+            output.append("✅ 信号:")
+            for s in result["signals"]:
+                output.append(f"  {s}")
+        
+        if result["risks"]:
+            output.append("")
+            output.append("⚠️ 风险:")
+            for r in result["risks"]:
+                output.append(f"  {r}")
+        
+        return "\n".join(output)
+    
+    # Smart Money: whales [链]
+    elif command.startswith("whales") or command.startswith("聪明钱"):
+        parts = command.split()
+        chain = parts[-1].lower() if len(parts) > 1 and parts[-1].lower() in ["solana", "ethereum", "bsc"] else "solana"
+        
+        result = find_smart_money(chain)
+        
+        output = [f"🐋 Smart Money 追踪 ({chain.upper()})", ""]
+        
+        if result["smart_money_tokens"]:
+            for t in result["smart_money_tokens"][:8]:
+                output.append(
+                    f"  🚀 {t['symbol']:10} {t['price_change_24h']:+6.1f}% | "
+                    f"Vol: ${t['volume_24h']:,.0f}"
+                )
+        else:
+            output.append("  暂无数据")
+        
+        return "\n".join(output)
     
     # 帮助
     elif command in ["help", "帮助", "?"]:
         return """
-🤖 OKX OnchainOS AI 助手
+🤖 OKX OnchainOS AI Assistant
 
-命令:
-- portfolio <地址> - 查询钱包组合
-- price <代币> [链] - 查询价格
-- search <代币> - 搜索代币
-- swap <从> <到> <数量> - 兑换报价
-- smart [链] - Smart Money 流向
-- analyze <代币> - AI 市场分析
-- plan <代币> <买卖> <金额> - 生成交易计划
+核心 Skills:
+- Market Rank: scan / filter
+- Token Info: price / search / deep
+- Token Audit: audit（可在 demo 中展示）
+- Trading Signal: market / smart / plan
+- Spot Execution: buy / 平仓（示例代码）
+- Address Info: portfolio / whales
+- Meme Hunter: scan + filter + deep 组合使用
+
+常用命令:
+- portfolio <地址>
+- price <代币> [链]
+- search <代币>
+- market <代币> [链]
+- plan <代币> <BUY/SELL> <金额> [链]
+- scan [链] [数量]
+- filter <流动性> [链]
+- deep <代币> [链]
+- whales [链]
 
 示例:
-  price ETH
-  search PEPE
-  swap ETH USDC 1
-  analyze PEPE
+  market PEPE ethereum
+  plan WETH BUY 1000 ethereum
+  scan solana 10
+  deep WIF solana
 """
     
     else:
